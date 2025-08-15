@@ -6,16 +6,20 @@
   <link rel="stylesheet" href="style.css">
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#2c3e50">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
 <body>
   <h1>Purchase Tracker</h1>
 
-  <input id="itemName" type="text" placeholder="Item name">
-  <input id="itemAmount" type="number" placeholder="Amount" step="0.01">
-  <input id="itemDate" type="date">
-  <button onclick="addPurchase()">Add Purchase</button>
+  <main>
+    <input id="itemName" type="text" placeholder="Item name">
+    <input id="itemAmount" type="number" placeholder="Amount" step="0.01">
+    <input id="itemDate" type="date">
+    <button onclick="addPurchase()">Add Purchase</button>
 
-  <div class="purchase-list" id="purchaseList"></div>
+    <div class="purchase-list" id="purchaseList"></div>
+  </main>
+
   <div class="total" id="totalSpent">Total: $0.00</div>
 
   <script src="script.js"></script>
