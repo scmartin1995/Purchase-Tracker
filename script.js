@@ -1,5 +1,5 @@
 // ======= CONFIG (Client ID only; API key not required) =======
-const CLIENT_ID = "YOUR_OAUTH_CLIENT_ID.apps.googleusercontent.com"; // <-- put yours
+const CLIENT_ID = "624129803500-p9iq7i2mbngcr5ut675cg4n23mbhsajo.apps.googleusercontent.com"; // <-- put yours
 const SCOPES = "https://www.googleapis.com/auth/spreadsheets";
 const DISCOVERY_DOC = "https://sheets.googleapis.com/$discovery/rest?version=v4";
 const SHEET_TITLE = "Sheet1";
