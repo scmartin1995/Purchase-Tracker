@@ -37,6 +37,8 @@ button:hover { background:var(--blue-dark); }
 .menu-link.danger { background:#ffe6e9; border-color:#ffc2c8; }
 
 .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; z-index:200; }
+/* Hide overlay when not active */
+.modal-overlay[hidden] { display:none; }
 .modal { background:#fff; border-radius:12px; padding:18px; width:min(92vw, 480px); box-shadow:0 10px 30px rgba(0,0,0,.25); }
 .modal h2 { margin:0 0 8px 0; font-size:1.2rem; }
 .modal-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:12px; }
