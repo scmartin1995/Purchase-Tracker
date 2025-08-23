@@ -1,4 +1,4 @@
-const CACHE_NAME = "purchase-tracker-hardcoded-material-v1";
+const CACHE_NAME = "purchase-tracker-hardcoded-material-v20";
 const ASSETS = [
   "./",
   "./index.html",
