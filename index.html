@@ -8,78 +8,31 @@
   <meta name="theme-color" content="#0d1b2a">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <!-- Chart.js (pinned) -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-  <!-- Google libraries (OAuth + Sheets API) -->
+  <!-- Google APIs -->
   <script src="https://apis.google.com/js/api.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-
-  <!-- Basic Content Security Policy -->
-  <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self';
-                 script-src 'self' https://apis.google.com https://accounts.google.com https://cdn.jsdelivr.net 'unsafe-inline';
-                 connect-src https://sheets.googleapis.com https://accounts.google.com https://oauth2.googleapis.com;
-                 img-src 'self' data:;
-                 style-src 'self' 'unsafe-inline';
-                 base-uri 'self';
-                 frame-ancestors 'self';">
 </head>
 <body>
   <header>
-    <button id="menuBtn" class="icon-btn" aria-label="Menu" onclick="toggleMenu()">☰</button>
     <h1>Purchase Tracker</h1>
     <button id="googleSignInBtn" class="signin-btn" onclick="googleSignIn()">Sign in with Google</button>
-  </header>
-
-  <!-- Slide-out hamburger menu -->
-  <nav id="sideMenu" class="side-menu" aria-hidden="true">
-    <div class="menu-header">
-      <span>Menu</span>
-      <button class="icon-btn" aria-label="Close" onclick="toggleMenu()">✕</button>
-    </div>
-    <ul>
-      <li><button class="menu-link" onclick="goPage('home'); toggleMenu();">Home</button></li>
-      <li><button class="menu-link" onclick="goPage('purchases'); toggleMenu();">Purchases</button></li>
-      <li><button class="menu-link warn" onclick="openNewSheetConfirm();">Use a new Google Sheet…</button></li>
-      <li><button class="menu-link danger" onclick="signOutAndClear();">Sign out & clear this device</button></li>
-    </ul>
-  </nav>
-
-  <!-- Confirmation modal for New Google Sheet -->
-  <div id="modalOverlay" class="modal-overlay" hidden>
-    <div class="modal">
-      <h2>Create a new Google Sheet?</h2>
-      <p>This will create a new personal sheet in your Google Drive. Your existing sheet stays untouched. Future purchases will sync to the new one.</p>
-      <div class="modal-actions">
-        <button class="clear-btn" onclick="closeNewSheetConfirm()">Cancel</button>
-        <button class="confirm-btn" onclick="confirmNewSheet()">Create New Sheet</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Pages -->
-  <main id="page-home" class="page active">
     <div class="input-container">
       <input id="itemName" type="text" placeholder="Item name">
       <input id="itemAmount" type="number" placeholder="Amount" step="0.01">
       <input id="itemDate" type="date">
       <button onclick="addPurchase()">Add Purchase</button>
-      <button class="clear-btn" onclick="clearPurchases()">Clear All (local only)</button>
+      <button class="clear-btn" onclick="clearPurchases()">Clear All</button>
       <div id="syncStatus" class="sync-status">Not synced yet</div>
+      <button class="linkish" onclick="resetSheet()">Use a new Google Sheet</button>
     </div>
+  </header>
 
-    <div class="card">
-      <h3>Spending burn-up</h3>
-      <canvas id="burnupChart"></canvas>
-    </div>
-  </main>
-
-  <main id="page-purchases" class="page">
-    <div class="card">
-      <h3>Purchases</h3>
-      <div class="purchase-list" id="purchaseList"></div>
-    </div>
+  <main>
+    <div class="purchase-list" id="purchaseList"></div>
+    <div class="chart-container"><canvas id="burnupChart"></canvas></div>
   </main>
 
   <footer class="total" id="totalSpent">Total: $0.00</footer>
