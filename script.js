@@ -123,8 +123,8 @@ function deletePurchase(index){
 function clearPurchases(){
   if(!confirm("Clear all purchases on this device?\n\nThis will NOT delete anything from your Google Sheet.")) return;
   purchases = [];
-  localStorage.removeItem('purchases');
   renderPurchases();
+  localStorage.removeItem('purchases');
   setSyncStatus('Cleared locally ✓','ok');
 }
 
@@ -280,12 +280,12 @@ async function signOutAndClear(){
     }
   } catch {}
   gapi.client.setToken(null);
+  purchases = [];
+  renderPurchases();
   localStorage.removeItem('purchases');
   localStorage.removeItem(LS_KEY_SHEET_ID);
   localStorage.removeItem(LS_KEY_SHEET_GID);
-  purchases = [];
   SPREADSHEET_ID = null; SHEET_GID = null;
-  renderPurchases();
   showSignInButton();
   setSyncStatus('Signed out & cleared this device','ok');
 }
