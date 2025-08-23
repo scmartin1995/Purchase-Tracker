@@ -1,44 +1,114 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Purchase Tracker</title>
-  <link rel="stylesheet" href="style.css">
-  <link rel="manifest" href="manifest.json">
-  <meta name="theme-color" content="#1a73e8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#1a73e8" />
+
+  <!-- Google Material Symbols (icons) -->
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet" />
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="style.css" />
+
+  <!-- Chart.js (pinned) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+
+  <!-- Google APIs -->
   <script src="https://apis.google.com/js/api.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
+
+  <!-- Basic CSP -->
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self';
+                 script-src 'self' https://apis.google.com https://accounts.google.com https://cdn.jsdelivr.net;
+                 connect-src https://sheets.googleapis.com https://accounts.google.com https://oauth2.googleapis.com;
+                 img-src 'self' data:;
+                 style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+                 font-src https://fonts.gstatic.com;
+                 base-uri 'self';
+                 frame-ancestors 'self';">
 </head>
 <body>
-  <header>
+  <header class="appbar">
+    <button class="icon-btn" aria-label="Menu" onclick="toggleMenu()">
+      <span class="material-symbols-outlined">menu</span>
+    </button>
     <h1>Purchase Tracker</h1>
-    <button id="googleSignInBtn" class="signin-btn" onclick="googleSignIn()">
-      <span class="material-symbols-outlined">login</span> Sign in
+    <button id="googleSignInBtn" class="btn text-on-primary" onclick="googleSignIn()">
+      <span class="material-symbols-outlined">login</span>
+      <span>Sign in</span>
     </button>
   </header>
-  <main>
-    <div class="input-container">
-      <input id="itemName" type="text" placeholder="Item name">
-      <input id="itemAmount" type="number" placeholder="Amount" step="0.01">
-      <input id="itemDate" type="date">
-      <button onclick="addPurchase()">
-        <span class="material-symbols-outlined">add</span> Add Purchase
+
+  <!-- Side menu -->
+  <nav id="sideMenu" class="side-menu" aria-hidden="true">
+    <div class="menu-header">
+      <strong>Menu</strong>
+      <button class="icon-btn" aria-label="Close" onclick="toggleMenu()">
+        <span class="material-symbols-outlined">close</span>
       </button>
-      <button class="clear-btn" onclick="clearPurchases()">
-        <span class="material-symbols-outlined">delete_forever</span> Clear All (local only)
-      </button>
-      <div id="syncStatus" class="sync-status">Not synced yet</div>
     </div>
-    <div class="purchase-list" id="purchaseList"></div>
-    <div class="chart-container">
+    <ul>
+      <li><button class="menu-link" onclick="goPage('home'); toggleMenu();"><span class="material-symbols-outlined">home</span> Home</button></li>
+      <li><button class="menu-link" onclick="goPage('purchases'); toggleMenu();"><span class="material-symbols-outlined">receipt_long</span> Purchases</button></li>
+      <li><button class="menu-link warn" onclick="openNewSheetModal();"><span class="material-symbols-outlined">post_add</span> Use a new Google Sheet…</button></li>
+      <li><button class="menu-link danger" onclick="signOutAndClear();"><span class="material-symbols-outlined">logout</span> Sign out & clear this device</button></li>
+    </ul>
+  </nav>
+
+  <!-- New Sheet Modal -->
+  <div id="modalOverlay" class="modal-overlay" hidden>
+    <div class="modal">
+      <h2>Use a new Google Sheet</h2>
+      <p>Enter the <b>Spreadsheet ID</b> (text between <code>/d/</code> and <code>/edit</code> in the Sheet URL). This overrides the hardcoded Sheet for this device only.</p>
+      <input id="sheetIdInput" placeholder="e.g. 1AbCDeFg...XYZ" />
+      <div class="modal-actions">
+        <button class="btn" onclick="closeNewSheetModal()">Cancel</button>
+        <button class="btn primary" onclick="confirmNewSheet()">Switch Sheet</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pages -->
+  <main id="page-home" class="page active">
+    <section class="card">
+      <h3>Add purchase</h3>
+      <div class="input-grid">
+        <input id="itemName" type="text" placeholder="Item name" />
+        <input id="itemAmount" type="number" step="0.01" placeholder="Amount" />
+        <input id="itemDate" type="date" />
+      </div>
+      <div class="actions">
+        <button class="btn primary" onclick="addPurchase()">
+          <span class="material-symbols-outlined">add</span>
+          <span>Add Purchase</span>
+        </button>
+        <button class="btn danger" onclick="clearPurchases()">
+          <span class="material-symbols-outlined">delete_sweep</span>
+          <span>Clear All (local)</span>
+        </button>
+      </div>
+      <div id="syncStatus" class="status">Not synced yet</div>
+    </section>
+
+    <section class="card">
       <h3>Spending burn-up</h3>
       <canvas id="burnupChart"></canvas>
-    </div>
+    </section>
   </main>
+
+  <main id="page-purchases" class="page">
+    <section class="card">
+      <h3>Purchases</h3>
+      <div id="purchaseList" class="purchase-list"></div>
+    </section>
+  </main>
+
   <footer class="total" id="totalSpent">Total: $0.00</footer>
+
   <script src="script.js"></script>
   <script>
     if ("serviceWorker" in navigator) {
