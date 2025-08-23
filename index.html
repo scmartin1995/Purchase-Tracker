@@ -4,6 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Purchase Tracker</title>
+
+  <!-- PWA -->
   <link rel="manifest" href="manifest.json" />
   <meta name="theme-color" content="#1a73e8" />
 
@@ -20,10 +22,10 @@
   <script src="https://apis.google.com/js/api.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 
-  <!-- Basic CSP -->
+  <!-- Content Security Policy (allows inline handlers used by this page) -->
   <meta http-equiv="Content-Security-Policy"
         content="default-src 'self';
-                 script-src 'self' https://apis.google.com https://accounts.google.com https://cdn.jsdelivr.net;
+                 script-src 'self' 'unsafe-inline' https://apis.google.com https://accounts.google.com https://cdn.jsdelivr.net;
                  connect-src https://sheets.googleapis.com https://accounts.google.com https://oauth2.googleapis.com;
                  img-src 'self' data:;
                  style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
@@ -32,6 +34,7 @@
                  frame-ancestors 'self';">
 </head>
 <body>
+  <!-- Top app bar -->
   <header class="appbar">
     <button class="icon-btn" aria-label="Menu" onclick="toggleMenu()">
       <span class="material-symbols-outlined">menu</span>
@@ -43,7 +46,7 @@
     </button>
   </header>
 
-  <!-- Side menu (no new-sheet option) -->
+  <!-- Side (hamburger) menu -->
   <nav id="sideMenu" class="side-menu" aria-hidden="true">
     <div class="menu-header">
       <strong>Menu</strong>
@@ -54,23 +57,26 @@
     <ul>
       <li>
         <button class="menu-link" onclick="goPage('home'); toggleMenu();">
-          <span class="material-symbols-outlined">home</span> Home
+          <span class="material-symbols-outlined">home</span>
+          Home
         </button>
       </li>
       <li>
         <button class="menu-link" onclick="goPage('purchases'); toggleMenu();">
-          <span class="material-symbols-outlined">receipt_long</span> Purchases
+          <span class="material-symbols-outlined">receipt_long</span>
+          Purchases
         </button>
       </li>
       <li>
         <button class="menu-link danger" onclick="signOutAndClear();">
-          <span class="material-symbols-outlined">logout</span> Sign out & clear this device
+          <span class="material-symbols-outlined">logout</span>
+          Sign out & clear this device
         </button>
       </li>
     </ul>
   </nav>
 
-  <!-- Pages -->
+  <!-- HOME PAGE -->
   <main id="page-home" class="page active">
     <section class="card">
       <h3>Add purchase</h3>
@@ -98,6 +104,7 @@
     </section>
   </main>
 
+  <!-- PURCHASES PAGE -->
   <main id="page-purchases" class="page">
     <section class="card">
       <h3>Purchases</h3>
@@ -105,9 +112,13 @@
     </section>
   </main>
 
+  <!-- Footer total -->
   <footer class="total" id="totalSpent">Total: $0.00</footer>
 
+  <!-- App logic -->
   <script src="script.js"></script>
+
+  <!-- Service worker registration -->
   <script>
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("service-worker.js");
