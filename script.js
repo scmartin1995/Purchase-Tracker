@@ -7,10 +7,6 @@ const DISCOVERY_DOC = "https://sheets.googleapis.com/$discovery/rest?version=v4"
 const SPREADSHEET_ID = "173gOcUfK1Ff5JEPurWfGdSbZ8TF57laoczzwc_QumQQ";
 const SHEET_RANGE = "Sheet1!A:C"; // Date, Name, Amount
 
-// Allow a per-device override via localStorage (set by "Use a new Google Sheet")
-const LS_KEY_SHEET_OVERRIDE = "sheetOverride";
-let SPREADSHEET_ID = localStorage.getItem(LS_KEY_SHEET_OVERRIDE) || DEFAULT_SPREADSHEET_ID;
-
 // Local model: { name, amount, date, row? }
 let purchases = JSON.parse(localStorage.getItem("purchases")) || [];
 let burnupChart;
@@ -27,24 +23,6 @@ function toggleMenu(){
 function goPage(name){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.getElementById(`page-${name}`).classList.add('active');
-}
-
-/* ---------- Modal (new sheet) ---------- */
-function openNewSheetModal(){
-  document.getElementById('sheetIdInput').value = SPREADSHEET_ID || '';
-  document.getElementById('modalOverlay').hidden = false;
-}
-function closeNewSheetModal(){
-  document.getElementById('modalOverlay').hidden = true;
-}
-function confirmNewSheet(){
-  const val = (document.getElementById('sheetIdInput').value || '').trim();
-  if(!val){ alert("Please paste a Spreadsheet ID."); return; }
-  if(!confirm("Switch to this Google Sheet for this device? Your local data stays the same.")) return;
-  localStorage.setItem(LS_KEY_SHEET_OVERRIDE, val);
-  SPREADSHEET_ID = val;
-  closeNewSheetModal();
-  setSyncStatus(`Now using sheet: ${val.slice(0,8)}…`, "ok");
 }
 
 /* ---------- UI helpers ---------- */
@@ -135,7 +113,7 @@ async function deletePurchase(index) {
   try {
     await ensureSignedIn();
 
-    // If we don't know the row yet, try to reconcile
+    // If we don't know the row yet (older local entries), try to reconcile
     if (!purchase.row) {
       await reconcileLocalWithSheet();
     }
@@ -280,9 +258,7 @@ async function signOutAndClear(){
   } catch {}
   gapi.client.setToken(null);
   localStorage.removeItem("purchases");
-  localStorage.removeItem(LS_KEY_SHEET_OVERRIDE);
   purchases = [];
-  SPREADSHEET_ID = DEFAULT_SPREADSHEET_ID;
   renderPurchases();
   const btn = document.getElementById("googleSignInBtn");
   if (btn) btn.style.display = "";
