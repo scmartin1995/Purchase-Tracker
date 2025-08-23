@@ -1,9 +1,9 @@
-// ===== Hardcoded Google Sheet with row-synced deletes =====
+// ===== Hardcoded Google Sheet with menu + separate Purchases page =====
 const CLIENT_ID = "624129803500-p9iq7i2mbngcr5ut675cg4n23mbhsajo.apps.googleusercontent.com"; // paste yours
 const SCOPES = "https://www.googleapis.com/auth/spreadsheets";
 const DISCOVERY_DOC = "https://sheets.googleapis.com/$discovery/rest?version=v4";
 
-// HARDCODE YOUR SHEET ID (between /d/ and /edit in the URL)
+// Always use this hardcoded Sheet
 const SPREADSHEET_ID = "173gOcUfK1Ff5JEPurWfGdSbZ8TF57laoczzwc_QumQQ";
 const SHEET_RANGE = "Sheet1!A:C"; // Date, Name, Amount
 
@@ -13,6 +13,13 @@ let burnupChart;
 let tokenClient;
 let gapiReady = false;
 let gisReady = false;
+
+/* ---------- Diagnostics helper ---------- */
+const diag = (msg, err) => {
+  console.log("[DIAG]", msg, err || "");
+  const el = document.getElementById("syncStatus");
+  if (el) el.textContent = `Status: ${msg}${err ? " — " + (err.message || err) : ""}`;
+};
 
 /* ---------- Menu + pages ---------- */
 function toggleMenu(){
@@ -97,9 +104,11 @@ async function addPurchase() {
     purchase.row = rowNum; // save 1-based row
     saveLocal();
     setSyncStatus("Synced ✓", "ok");
+    diag("Append OK, row " + rowNum);
   } catch (e) {
     console.warn("Sync failed", e);
     setSyncStatus("Sync failed ✗", "err");
+    diag("Append FAILED", e);
   }
 }
 
@@ -115,6 +124,7 @@ async function deletePurchase(index) {
 
     // If we don't know the row yet (older local entries), try to reconcile
     if (!purchase.row) {
+      diag("Reconciling to find row for delete…");
       await reconcileLocalWithSheet();
     }
 
@@ -125,12 +135,15 @@ async function deletePurchase(index) {
       purchases.forEach((p) => { if (p.row && p.row > purchase.row) p.row -= 1; });
       saveLocal();
       setSyncStatus("Deleted on sheet ✓", "ok");
+      diag("Delete row OK: " + purchase.row);
     } else {
       setSyncStatus("Deleted locally (no matching sheet row found)", "ok");
+      diag("Delete local only — no row found");
     }
   } catch (e) {
     console.warn("Delete on sheet failed", e);
     setSyncStatus("Delete on sheet failed ✗", "err");
+    diag("Delete FAILED", e);
   }
 }
 
@@ -146,30 +159,36 @@ function clearPurchases() {
 /* ---------- Google init / auth ---------- */
 function initGapi() {
   return new Promise((resolve, reject) => {
-    if (!window.gapi) return reject(new Error("gapi not loaded"));
+    if (!window.gapi) { diag("gapi not loaded"); return reject("gapi missing"); }
     gapi.load("client", async () => {
       try {
         await gapi.client.init({ discoveryDocs: [DISCOVERY_DOC] }); // no API key needed
         gapiReady = true;
+        diag("gapi client init OK");
         resolve();
-      } catch (e) { reject(e); }
+      } catch (e) {
+        diag("gapi client init FAILED", e);
+        reject(e);
+      }
     });
   });
 }
 function initGIS() {
-  if (!window.google || !google.accounts?.oauth2) throw new Error("GIS not loaded");
+  if (!window.google || !google.accounts?.oauth2) { diag("GIS script not loaded"); throw new Error("GIS missing"); }
   tokenClient = google.accounts.oauth2.initTokenClient({
     client_id: CLIENT_ID,
     scope: SCOPES,
     prompt: "",
     callback: (resp) => {
-      if (resp.error) return;
+      if (resp.error) { diag("GIS token error", resp.error); return; }
       gapi.client.setToken({ access_token: resp.access_token });
       const btn = document.getElementById("googleSignInBtn");
       if (btn) btn.style.display = "none";
+      diag("GIS token acquired");
     },
   });
   gisReady = true;
+  diag("GIS init OK");
 }
 
 async function googleSignIn() {
@@ -224,7 +243,6 @@ async function deleteRowOnSheet(rowNumber1Based) {
   await gapi.client.sheets.spreadsheets.batchUpdate(req);
 }
 
-/** Reconcile local items (without `row`) to sheet rows (by date+name+amount). */
 async function reconcileLocalWithSheet() {
   await ensureSignedIn();
   const resp = await gapi.client.sheets.spreadsheets.values.get({
@@ -235,6 +253,7 @@ async function reconcileLocalWithSheet() {
   const sheetRows = values.map((r, idx) => {
     const [date = "", name = "", amount = ""] = r;
     return { date: (date || "").trim(), name: (name || "").trim(), amount: normalizeAmount(amount), rowNumber: idx + 2, matched:false };
+    // A2 is row 2
   });
   purchases.forEach(p => {
     if (p.row) return;
@@ -276,9 +295,11 @@ window.addEventListener("load", async () => {
       if (btn) btn.style.display = "none";
       await reconcileLocalWithSheet(); // attach rows to older local items
     } catch (_) { /* not signed in yet */ }
+    diag("App boot complete");
   } catch (e) {
     console.error("Init error", e);
     setSyncStatus("Init failed", "err");
+    diag("Init FAILED", e);
   }
   renderPurchases();
 });
@@ -289,6 +310,7 @@ document.addEventListener("visibilitychange", async () => {
       await ensureSignedIn();
       const btn = document.getElementById("googleSignInBtn");
       if (btn) btn.style.display = "none";
+      diag("Token refreshed (visibility)");
     } catch (_) {}
   }
 });
@@ -297,5 +319,6 @@ window.addEventListener("focus", async () => {
     await ensureSignedIn();
     const btn = document.getElementById("googleSignInBtn");
     if (btn) btn.style.display = "none";
+    diag("Token refreshed (focus)");
   } catch (_) {}
 });
