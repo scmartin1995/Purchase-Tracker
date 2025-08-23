@@ -5,38 +5,40 @@
   <title>Purchase Tracker</title>
   <link rel="stylesheet" href="style.css">
   <link rel="manifest" href="manifest.json">
-  <meta name="theme-color" content="#0d1b2a">
+  <meta name="theme-color" content="#1a73e8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-  <!-- Chart.js -->
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-  <!-- Google APIs -->
   <script src="https://apis.google.com/js/api.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
   <header>
     <h1>Purchase Tracker</h1>
-    <button id="googleSignInBtn" class="signin-btn" onclick="googleSignIn()">Sign in with Google</button>
+    <button id="googleSignInBtn" class="signin-btn" onclick="googleSignIn()">
+      <span class="material-symbols-outlined">login</span> Sign in
+    </button>
+  </header>
+  <main>
     <div class="input-container">
       <input id="itemName" type="text" placeholder="Item name">
       <input id="itemAmount" type="number" placeholder="Amount" step="0.01">
       <input id="itemDate" type="date">
-      <button onclick="addPurchase()">Add Purchase</button>
-      <button class="clear-btn" onclick="clearPurchases()">Clear All</button>
+      <button onclick="addPurchase()">
+        <span class="material-symbols-outlined">add</span> Add Purchase
+      </button>
+      <button class="clear-btn" onclick="clearPurchases()">
+        <span class="material-symbols-outlined">delete_forever</span> Clear All (local only)
+      </button>
       <div id="syncStatus" class="sync-status">Not synced yet</div>
-      <button class="linkish" onclick="promptSheetId()">Set Google Sheet ID</button>
     </div>
-  </header>
-
-  <main>
     <div class="purchase-list" id="purchaseList"></div>
-    <div class="chart-container"><canvas id="burnupChart"></canvas></div>
+    <div class="chart-container">
+      <h3>Spending burn-up</h3>
+      <canvas id="burnupChart"></canvas>
+    </div>
   </main>
-
   <footer class="total" id="totalSpent">Total: $0.00</footer>
-
   <script src="script.js"></script>
   <script>
     if ("serviceWorker" in navigator) {

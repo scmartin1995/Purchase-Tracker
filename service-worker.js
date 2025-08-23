@@ -1,4 +1,4 @@
-const CACHE_NAME = "purchase-tracker-cache-v12";
+const CACHE_NAME = "purchase-tracker-hardcoded-material-v1";
 const ASSETS = [
   "./",
   "./index.html",
@@ -7,7 +7,7 @@ const ASSETS = [
   "./manifest.json",
   "./icon-192.png",
   "./icon-512.png",
-  "https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"
+  "https://cdn.jsdelivr.net/npm/chart.js"
 ];
 
 self.addEventListener("install", event => {
