@@ -122,8 +122,20 @@ async function googleSignIn() {
 async function ensureSignedIn(){
   const token = gapi.client.getToken();
   if (token?.access_token) return;
-  tokenClient.requestAccessToken({ prompt:'' });
-  await new Promise(r=>setTimeout(r,700));
+  await new Promise((resolve, reject) => {
+    tokenClient.requestAccessToken({
+      prompt: '',
+      callback: (resp) => {
+        if (resp.error || !resp.access_token) {
+          reject(resp.error ? new Error(resp.error) : new Error('No token'));
+          return;
+        }
+        gapi.client.setToken({ access_token: resp.access_token });
+        document.getElementById('googleSignInBtn').style.display = 'none';
+        resolve();
+      }
+    });
+  });
 }
 
 async function ensureSheetInitialized(){
