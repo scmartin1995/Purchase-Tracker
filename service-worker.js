@@ -1,4 +1,4 @@
-const CACHE_NAME = "purchase-tracker-hardcoded-material-v5"; // bumped
+const CACHE_NAME = "purchase-tracker-auto-sheet-v1"; // new cache name
 const ASSETS = [
   "./",
   "./index.html",
