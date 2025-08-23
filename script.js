@@ -5,17 +5,17 @@ const API_KEY = "AIzaSyCOYAn_Dq89tUBhusfo1DqhYNjABwLmWAg";
 
 const SCOPES = "https://www.googleapis.com/auth/spreadsheets";
 const DISCOVERY_DOC = "https://sheets.googleapis.com/$discovery/rest?version=v4";
-const SHEET_RANGE = "Sheet1!A:C"; // Date, Name, Amount
-const SHEET_ID_STORAGE_KEY = "userSheetId";
+const SHEET_RANGE = "Sheet1!A:C";               // Date, Name, Amount
+const SHEET_ID_STORAGE_KEY = "userSheetId";     // saved per user/device
 
 let purchases = JSON.parse(localStorage.getItem('purchases')) || [];
 let burnupChart;
-let tokenClient;
-let gapiReady = false;
-let gisReady = false;
+let tokenClient;          // Google Identity Services token client
+let gapiReady = false;    // gapi client loaded
+let gisReady = false;     // GIS loaded
 let SPREADSHEET_ID = localStorage.getItem(SHEET_ID_STORAGE_KEY) || null;
 
-/* ========== UI helpers ========== */
+/* ---------- helpers ---------- */
 function setSyncStatus(msg, cls="") {
   const el = document.getElementById('syncStatus'); if (!el) return;
   el.className = 'sync-status ' + cls; el.textContent = msg;
@@ -23,12 +23,13 @@ function setSyncStatus(msg, cls="") {
 function hideSignInButton(){ const b=document.getElementById('googleSignInBtn'); if(b) b.style.display='none'; }
 function showSignInButton(){ const b=document.getElementById('googleSignInBtn'); if(b) b.style.display=''; }
 
-/* ========== Render list + chart ========== */
+/* ---------- UI render ---------- */
 function renderPurchases() {
   const list = document.getElementById('purchaseList');
   const totalDisplay = document.getElementById('totalSpent');
   list.innerHTML = '';
   let total = 0;
+
   purchases.forEach((p, i) => {
     total += parseFloat(p.amount);
     const row = document.createElement('div');
@@ -38,10 +39,12 @@ function renderPurchases() {
                      <button onclick="deletePurchase(${i})">❌</button>`;
     list.appendChild(row);
   });
+
   totalDisplay.textContent = `Total: $${total.toFixed(2)}`;
   localStorage.setItem('purchases', JSON.stringify(purchases));
   updateBurnupChart();
 }
+
 function updateBurnupChart() {
   const ctx = document.getElementById('burnupChart').getContext('2d');
   const sorted = [...purchases].sort((a,b)=> new Date(a.date)-new Date(b.date));
@@ -55,18 +58,20 @@ function updateBurnupChart() {
   });
 }
 
-/* ========== Buttons ========== */
+/* ---------- Buttons ---------- */
 function addPurchase() {
   const name = document.getElementById('itemName').value.trim();
   const amount = document.getElementById('itemAmount').value;
   const date = document.getElementById('itemDate').value;
   if (!name || !amount || !date) { alert('Please fill out all fields'); return; }
+
   const purchase = { name, amount, date };
   purchases.push(purchase);
   document.getElementById('itemName').value = '';
   document.getElementById('itemAmount').value = '';
   document.getElementById('itemDate').value = '';
   renderPurchases();
+
   appendRowToSheet(purchase)
     .then(()=> setSyncStatus('Synced ✓','ok'))
     .catch(()=> setSyncStatus('Sync failed ✗','err'));
@@ -75,7 +80,7 @@ function deletePurchase(i){ purchases.splice(i,1); renderPurchases(); }
 function clearPurchases(){ if(confirm("Clear all purchases?")){ purchases=[]; localStorage.removeItem('purchases'); renderPurchases(); } }
 async function resetSheet(){ localStorage.removeItem(SHEET_ID_STORAGE_KEY); SPREADSHEET_ID=null; await ensureSignedIn(); await ensureSheetInitialized(); setSyncStatus('New sheet linked ✓','ok'); }
 
-/* ========== Google init ========== */
+/* ---------- Google init ---------- */
 function initGapi() {
   return new Promise((resolve,reject)=>{
     if(!window.gapi) return reject(new Error("gapi not loaded"));
@@ -89,10 +94,12 @@ function initGapi() {
 }
 function initGIS() {
   if(!window.google || !google.accounts?.oauth2) throw new Error("GIS not loaded");
+
+  // Token client for *silent* refresh on load
   tokenClient = google.accounts.oauth2.initTokenClient({
     client_id: CLIENT_ID,
     scope: SCOPES,
-    prompt: '',
+    prompt: '', // silent refresh if consent already given on this origin
     callback: (resp)=>{
       if(resp.error) return;
       gapi.client.setToken({ access_token: resp.access_token });
@@ -106,12 +113,12 @@ function initGIS() {
 /* must be global so the button can call it */
 async function googleSignIn() {
   if(!gapiReady || !gisReady){ alert("Still loading Google services. Try again in a second."); return; }
-  // show Google consent once
+  // First-time explicit consent (shows the Google prompt ONCE)
   tokenClient.requestAccessToken({ prompt:'consent' });
 }
 window.googleSignIn = googleSignIn;
 
-/* ========== Create + use personal sheet ========== */
+/* ---------- Create + use personal sheet ---------- */
 async function createSpreadsheet() {
   const title = `Purchase Tracker (${new Date().toLocaleDateString()})`;
   // create a new spreadsheet in the user’s Drive
@@ -138,14 +145,19 @@ async function ensureSheetInitialized(){
   setSyncStatus('Sheet created ✓','ok');
   return id;
 }
+
+/* ---------- Auth helpers ---------- */
 async function ensureSignedIn(){
   const token = gapi.client.getToken();
   if (token?.access_token) return;
-  tokenClient.requestAccessToken({ prompt:'' }); // silent if you already granted once
+  // Try SILENT refresh (no prompt). Works after first consent on this origin.
+  tokenClient.requestAccessToken({ prompt:'' });
   await new Promise(r=>setTimeout(r,700));
   const t = gapi.client.getToken();
   if (!t?.access_token) throw new Error("Not authorized");
 }
+
+/* ---------- Sheets append ---------- */
 async function appendRowToSheet(p){
   setSyncStatus('Syncing to Google Sheets…');
   await ensureSignedIn();
@@ -160,13 +172,18 @@ async function appendRowToSheet(p){
   return gapi.client.sheets.spreadsheets.values.append(req);
 }
 
-/* ========== start app ========== */
+/* ---------- start app ---------- */
 window.addEventListener('load', async ()=>{
   try {
-    await initGapi(); initGIS();
-    // try silent sign-in; if already granted, auto-prepare the sheet
+    await initGapi();            // load gapi client
+    initGIS();                   // setup GIS token client (silent refresh ready)
+
+    // Try silent sign-in; if already granted, no prompt will appear
     try { await ensureSignedIn(); hideSignInButton(); await ensureSheetInitialized(); }
-    catch(_) { showSignInButton(); }
-  } catch(e) { setSyncStatus('Init failed','err'); }
+    catch(_) { showSignInButton(); }  // first-time users will tap the button
+  } catch(e) {
+    console.error("Init error", e);
+    setSyncStatus('Init failed','err');
+  }
   renderPurchases();
 });
