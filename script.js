@@ -1,7 +1,7 @@
 /***** 🔧 CONFIG: fill these three from your Google project & Sheet *****/
-const CLIENT_ID = 624129803500-p9iq7i2mbngcr5ut675cg4n23mbhsajo.apps.googleusercontent.com;
-const API_KEY = AIzaSyCOYAn_Dq89tUBhusfo1DqhYNjABwLmWAg;
-const SPREADSHEET_ID = https://docs.google.com/spreadsheets/d/1Pa5KS7dLra5HpCuhIZ50OVFUzafU90pXZiPCLcc5_ec/edit?gid=0#gid=0
+const CLIENT_ID = "624129803500-p9iq7i2mbngcr5ut675cg4n23mbhsajo.apps.googleusercontent.com";
+const API_KEY = "AIzaSyCOYAn_Dq89tUBhusfo1DqhYNjABwLmWAg";
+const SPREADSHEET_ID = "1GxeOVJ17au5QepGRuWU6JjORNYgN7Tk41wSsfWlKrWQ"
 const SHEET_RANGE = "Sheet1!A:C"; // date, name, amount columns
 /***********************************************************************/
 
