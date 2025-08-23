@@ -9,7 +9,7 @@ body {
 }
 
 header {
-  background: #007BFF;
+  background: #0d1b2a; /* Deep dark blue */
   color: white;
   padding: 12px;
   position: sticky;
@@ -38,7 +38,7 @@ input, button {
 }
 
 button {
-  background: #0056b3;
+  background: #1b263b; /* Lighter dark blue */
   color: white;
   border: none;
   font-weight: bold;
@@ -47,7 +47,16 @@ button {
 }
 
 button:hover {
-  background: #004494;
+  background: #0d1b2a;
+}
+
+/* Clear All button style */
+.clear-btn {
+  background: #dc3545;
+}
+
+.clear-btn:hover {
+  background: #b52a37;
 }
 
 main {
@@ -60,6 +69,7 @@ main {
   background: white;
   border-radius: 8px;
   padding: 12px;
+  margin-bottom: 16px;
 }
 
 .purchase-item {
@@ -86,7 +96,7 @@ main {
 }
 
 .total {
-  background: #007BFF;
+  background: #0d1b2a; /* Deep dark blue footer */
   color: white;
   font-weight: bold;
   padding: 12px;
@@ -95,4 +105,11 @@ main {
   bottom: 0;
   z-index: 10;
   font-size: 1.1rem;
+}
+
+/* Chart styling */
+.chart-container {
+  background: white;
+  border-radius: 8px;
+  padding: 12px;
 }
