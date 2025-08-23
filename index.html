@@ -8,10 +8,10 @@
   <meta name="theme-color" content="#0d1b2a">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <!-- Chart.js for burn-up chart -->
+  <!-- Chart.js for the burn-up chart -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-  <!-- Google APIs (client) + Google Identity Services (OAuth) -->
+  <!-- Google libraries (required for sign-in + Sheets API) -->
   <script src="https://apis.google.com/js/api.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
@@ -19,7 +19,7 @@
   <header>
     <h1>Purchase Tracker</h1>
 
-    <!-- Sign in once; hides after success -->
+    <!-- tap this once; hides after you’re signed in -->
     <button id="googleSignInBtn" class="signin-btn" onclick="googleSignIn()">Sign in with Google</button>
 
     <div class="input-container">
@@ -28,14 +28,18 @@
       <input id="itemDate" type="date">
       <button onclick="addPurchase()">Add Purchase</button>
       <button class="clear-btn" onclick="clearPurchases()">Clear All</button>
+
+      <!-- shows “Synced ✓” or an error -->
+      <div id="syncStatus" class="sync-status">Not synced yet</div>
+
+      <!-- lets a user start a fresh personal sheet later -->
+      <button class="linkish" onclick="resetSheet()">Use a new Google Sheet</button>
     </div>
   </header>
 
   <main>
     <div class="purchase-list" id="purchaseList"></div>
-    <div class="chart-container">
-      <canvas id="burnupChart"></canvas>
-    </div>
+    <div class="chart-container"><canvas id="burnupChart"></canvas></div>
   </main>
 
   <footer class="total" id="totalSpent">Total: $0.00</footer>
