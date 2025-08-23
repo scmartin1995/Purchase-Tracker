@@ -84,15 +84,14 @@ function clearPurchases(){
   }
 }
 
-function resetSheet(){
-  if(!confirm('Use a new Google Sheet?')) return;
-  SPREADSHEET_ID = null;
-  localStorage.removeItem('userSheetId');
-  setSyncStatus('Sheet reset. Please sign in again','err');
-  const btn = document.getElementById('googleSignInBtn');
-  if (btn) btn.style.display = '';
+function promptSheetId(){
+  const id = prompt('Enter existing Google Sheet ID:');
+  if(!id) return;
+  SPREADSHEET_ID = id.trim();
+  localStorage.setItem('userSheetId', SPREADSHEET_ID);
+  setSyncStatus('Sheet ID saved','ok');
 }
-window.resetSheet = resetSheet;
+window.promptSheetId = promptSheetId;
 
 function initGapi() {
   return new Promise((resolve,reject)=>{
@@ -115,7 +114,6 @@ function initGIS() {
       if(resp.error) return;
       gapi.client.setToken({ access_token: resp.access_token });
       document.getElementById('googleSignInBtn').style.display = 'none';
-      ensureSheetInitialized().catch(()=>{});
     }
   });
   gisReady = true;
@@ -137,22 +135,8 @@ async function ensureSignedIn(){
 }
 
 async function ensureSheetInitialized(){
-  if (SPREADSHEET_ID) return SPREADSHEET_ID;
-  await ensureSignedIn();
-  const res = await gapi.client.sheets.spreadsheets.create({
-    properties: { title: `Purchase Tracker (${new Date().toLocaleDateString()})` },
-    sheets: [{ properties: { title: "Sheet1" } }]
-  });
-  const id = res.result.spreadsheetId;
-  SPREADSHEET_ID = id;
-  localStorage.setItem('userSheetId', id);
-  await gapi.client.sheets.spreadsheets.values.update({
-    spreadsheetId: id,
-    range: "Sheet1!A1:C1",
-    valueInputOption: "RAW",
-    resource: { values: [["Date","Name","Amount"]] }
-  });
-  return id;
+  if (!SPREADSHEET_ID) throw new Error('No spreadsheet ID set');
+  return SPREADSHEET_ID;
 }
 
 async function appendRowToSheet(p){
@@ -171,7 +155,11 @@ window.addEventListener('load', async ()=>{
   try {
     await initGapi();
     initGIS();
-    try { await ensureSignedIn(); document.getElementById('googleSignInBtn').style.display='none'; await ensureSheetInitialized(); }
+    try {
+      await ensureSignedIn();
+      document.getElementById('googleSignInBtn').style.display='none';
+      if(!SPREADSHEET_ID) setSyncStatus('No Google Sheet ID set','err');
+    }
     catch(_) { document.getElementById('googleSignInBtn').style.display=''; }
   } catch(e) {
     console.error("Init error", e);
