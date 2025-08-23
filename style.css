@@ -50,11 +50,16 @@ button:hover {
   background: #0d1b2a;
 }
 
+/* Sign-in button visual */
+.signin-btn {
+  background: #1b263b;
+  margin-top: 8px;
+}
+
 /* Clear All button style */
 .clear-btn {
   background: #dc3545;
 }
-
 .clear-btn:hover {
   background: #b52a37;
 }
@@ -107,7 +112,7 @@ main {
   font-size: 1.1rem;
 }
 
-/* Chart styling */
+/* Chart card */
 .chart-container {
   background: white;
   border-radius: 8px;
