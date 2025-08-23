@@ -1,208 +1,172 @@
-/***** 🔧 CONFIG: fill these three from your Google project & Sheet *****/
+/***** put your own values here *****/
 const CLIENT_ID = "624129803500-p9iq7i2mbngcr5ut675cg4n23mbhsajo.apps.googleusercontent.com";
 const API_KEY = "AIzaSyCOYAn_Dq89tUBhusfo1DqhYNjABwLmWAg";
-const SPREADSHEET_ID = "1GxeOVJ17au5QepGRuWU6JjORNYgN7Tk41wSsfWlKrWQ"
-const SHEET_RANGE = "Sheet1!A:C"; // date, name, amount columns
-/***********************************************************************/
+/***********************************/
 
 const SCOPES = "https://www.googleapis.com/auth/spreadsheets";
 const DISCOVERY_DOC = "https://sheets.googleapis.com/$discovery/rest?version=v4";
+const SHEET_RANGE = "Sheet1!A:C"; // Date, Name, Amount
+const SHEET_ID_STORAGE_KEY = "userSheetId";
 
 let purchases = JSON.parse(localStorage.getItem('purchases')) || [];
 let burnupChart;
 let tokenClient;
-let gapiInited = false;
-let gisInited = false;
+let gapiReady = false;
+let gisReady = false;
+let SPREADSHEET_ID = localStorage.getItem(SHEET_ID_STORAGE_KEY) || null;
 
-/* ---------- UI RENDER ---------- */
+/* ========== UI helpers ========== */
+function setSyncStatus(msg, cls="") {
+  const el = document.getElementById('syncStatus'); if (!el) return;
+  el.className = 'sync-status ' + cls; el.textContent = msg;
+}
+function hideSignInButton(){ const b=document.getElementById('googleSignInBtn'); if(b) b.style.display='none'; }
+function showSignInButton(){ const b=document.getElementById('googleSignInBtn'); if(b) b.style.display=''; }
+
+/* ========== Render list + chart ========== */
 function renderPurchases() {
   const list = document.getElementById('purchaseList');
   const totalDisplay = document.getElementById('totalSpent');
   list.innerHTML = '';
   let total = 0;
-
-  purchases.forEach((p, index) => {
+  purchases.forEach((p, i) => {
     total += parseFloat(p.amount);
-    const div = document.createElement('div');
-    div.className = 'purchase-item';
-    div.innerHTML = `
-      <span>${p.date} - ${p.name}</span>
-      <span>$${parseFloat(p.amount).toFixed(2)}</span>
-      <button onclick="deletePurchase(${index})">❌</button>
-    `;
-    list.appendChild(div);
+    const row = document.createElement('div');
+    row.className = 'purchase-item';
+    row.innerHTML = `<span>${p.date} - ${p.name}</span>
+                     <span>$${parseFloat(p.amount).toFixed(2)}</span>
+                     <button onclick="deletePurchase(${i})">❌</button>`;
+    list.appendChild(row);
   });
-
   totalDisplay.textContent = `Total: $${total.toFixed(2)}`;
   localStorage.setItem('purchases', JSON.stringify(purchases));
-
   updateBurnupChart();
 }
-
 function updateBurnupChart() {
   const ctx = document.getElementById('burnupChart').getContext('2d');
-  const sorted = [...purchases].sort((a, b) => new Date(a.date) - new Date(b.date));
-
-  let labels = [];
-  let cumulative = 0;
-  let data = [];
-
-  sorted.forEach(p => {
-    cumulative += parseFloat(p.amount);
-    labels.push(p.date);
-    data.push(Number(cumulative.toFixed(2)));
-  });
-
+  const sorted = [...purchases].sort((a,b)=> new Date(a.date)-new Date(b.date));
+  let labels=[], data=[], sum=0;
+  sorted.forEach(p=>{ sum+=parseFloat(p.amount); labels.push(p.date); data.push(+sum.toFixed(2)); });
   if (burnupChart) burnupChart.destroy();
-
   burnupChart = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels,
-      datasets: [{
-        label: 'Cumulative Spending',
-        data,
-        fill: false,
-        borderColor: '#0d1b2a',
-        backgroundColor: '#1b263b',
-        tension: 0.2
-      }]
-    },
-    options: {
-      responsive: true,
-      plugins: { legend: { display: true } },
-      scales: { x: { ticks: {} }, y: { ticks: {} } }
-    }
+    type:'line',
+    data:{ labels, datasets:[{ label:'Cumulative Spending', data, fill:false, borderColor:'#0d1b2a', backgroundColor:'#1b263b', tension:.2 }]},
+    options:{ responsive:true }
   });
 }
 
-/* ---------- CRUD ---------- */
+/* ========== Buttons ========== */
 function addPurchase() {
   const name = document.getElementById('itemName').value.trim();
   const amount = document.getElementById('itemAmount').value;
   const date = document.getElementById('itemDate').value;
-  if (!name || !amount || !date) {
-    alert('Please fill out all fields');
-    return;
-  }
+  if (!name || !amount || !date) { alert('Please fill out all fields'); return; }
   const purchase = { name, amount, date };
   purchases.push(purchase);
   document.getElementById('itemName').value = '';
   document.getElementById('itemAmount').value = '';
   document.getElementById('itemDate').value = '';
   renderPurchases();
-  // Try to sync; if not signed in yet, it will be queued by the user pressing Sign in
-  appendRowToSheet(purchase).catch(err => console.warn('Sheets sync skipped:', err));
+  appendRowToSheet(purchase)
+    .then(()=> setSyncStatus('Synced ✓','ok'))
+    .catch(()=> setSyncStatus('Sync failed ✗','err'));
 }
+function deletePurchase(i){ purchases.splice(i,1); renderPurchases(); }
+function clearPurchases(){ if(confirm("Clear all purchases?")){ purchases=[]; localStorage.removeItem('purchases'); renderPurchases(); } }
+async function resetSheet(){ localStorage.removeItem(SHEET_ID_STORAGE_KEY); SPREADSHEET_ID=null; await ensureSignedIn(); await ensureSheetInitialized(); setSyncStatus('New sheet linked ✓','ok'); }
 
-function deletePurchase(index) {
-  purchases.splice(index, 1);
-  renderPurchases();
-}
-
-function clearPurchases() {
-  if (confirm("Are you sure you want to clear all purchases?")) {
-    purchases = [];
-    localStorage.removeItem('purchases');
-    renderPurchases();
-  }
-}
-
-/* ---------- GOOGLE AUTH + SHEETS ---------- */
-// Load gapi client
-function initializeGapiClient() {
-  return new Promise((resolve, reject) => {
-    gapi.load('client', async () => {
+/* ========== Google init ========== */
+function initGapi() {
+  return new Promise((resolve,reject)=>{
+    if(!window.gapi) return reject(new Error("gapi not loaded"));
+    gapi.load('client', async ()=>{
       try {
-        await gapi.client.init({
-          apiKey: API_KEY || undefined,
-          discoveryDocs: [DISCOVERY_DOC],
-        });
-        gapiInited = true;
-        resolve();
-      } catch (e) {
-        reject(e);
-      }
+        await gapi.client.init({ apiKey: API_KEY || undefined, discoveryDocs:[DISCOVERY_DOC] });
+        gapiReady = true; resolve();
+      } catch(e){ reject(e); }
     });
   });
 }
-
-// Prepare the token client (Google Identity Services)
-function initializeTokenClient() {
+function initGIS() {
+  if(!window.google || !google.accounts?.oauth2) throw new Error("GIS not loaded");
   tokenClient = google.accounts.oauth2.initTokenClient({
     client_id: CLIENT_ID,
     scope: SCOPES,
-    prompt: '', // empty = silent if already consented for this origin
-    callback: (resp) => {
-      if (resp.error) {
-        console.error('OAuth error:', resp);
-        return;
-      }
-      // Attach the token to gapi for Sheets calls
+    prompt: '',
+    callback: (resp)=>{
+      if(resp.error) return;
       gapi.client.setToken({ access_token: resp.access_token });
-      hideSignInButton(); // we have a token; hide the button
-      console.log('Google token obtained.');
-    },
-  });
-  gisInited = true;
-}
-
-function googleSignIn() {
-  // Force prompt the first time to grant consent
-  tokenClient.requestAccessToken({ prompt: 'consent' });
-}
-
-function ensureSignedIn() {
-  return new Promise((resolve, reject) => {
-    const token = gapi.client.getToken();
-    if (token && token.access_token) {
-      return resolve();
+      hideSignInButton();
+      ensureSheetInitialized().catch(()=>{});
     }
-    // Try silent token (no prompt) if already granted to this origin
-    tokenClient.requestAccessToken({ prompt: '' });
-    // Wait a tick for callback to set token
-    setTimeout(() => {
-      const t = gapi.client.getToken();
-      t && t.access_token ? resolve() : reject(new Error('Not authorized'));
-    }, 800);
   });
+  gisReady = true;
 }
 
-async function appendRowToSheet(purchase) {
-  await ensureSignedIn(); // make sure we have a token (silent after first consent)
+/* must be global so the button can call it */
+async function googleSignIn() {
+  if(!gapiReady || !gisReady){ alert("Still loading Google services. Try again in a second."); return; }
+  // show Google consent once
+  tokenClient.requestAccessToken({ prompt:'consent' });
+}
+window.googleSignIn = googleSignIn;
 
-  const values = [[purchase.date, purchase.name, purchase.amount]];
-  const request = {
+/* ========== Create + use personal sheet ========== */
+async function createSpreadsheet() {
+  const title = `Purchase Tracker (${new Date().toLocaleDateString()})`;
+  // create a new spreadsheet in the user’s Drive
+  const res = await gapi.client.sheets.spreadsheets.create({
+    properties: { title }, sheets: [{ properties: { title: "Sheet1" } }]
+  });
+  const id = res.result.spreadsheetId;
+  // add header row
+  await gapi.client.sheets.spreadsheets.values.update({
+    spreadsheetId: id,
+    range: "Sheet1!A1:C1",
+    valueInputOption: "RAW",
+    resource: { values: [["Date","Name","Amount"]] }
+  });
+  return id;
+}
+async function ensureSheetInitialized(){
+  if (SPREADSHEET_ID) return SPREADSHEET_ID;
+  await ensureSignedIn();
+  setSyncStatus('Creating your Google Sheet…');
+  const id = await createSpreadsheet();
+  SPREADSHEET_ID = id;
+  localStorage.setItem(SHEET_ID_STORAGE_KEY, id);
+  setSyncStatus('Sheet created ✓','ok');
+  return id;
+}
+async function ensureSignedIn(){
+  const token = gapi.client.getToken();
+  if (token?.access_token) return;
+  tokenClient.requestAccessToken({ prompt:'' }); // silent if you already granted once
+  await new Promise(r=>setTimeout(r,700));
+  const t = gapi.client.getToken();
+  if (!t?.access_token) throw new Error("Not authorized");
+}
+async function appendRowToSheet(p){
+  setSyncStatus('Syncing to Google Sheets…');
+  await ensureSignedIn();
+  await ensureSheetInitialized();
+  const req = {
     spreadsheetId: SPREADSHEET_ID,
     range: SHEET_RANGE,
     valueInputOption: "USER_ENTERED",
     insertDataOption: "INSERT_ROWS",
-    resource: { values }
+    resource: { values: [[p.date, p.name, p.amount]] }
   };
-  return gapi.client.sheets.spreadsheets.values.append(request);
+  return gapi.client.sheets.spreadsheets.values.append(req);
 }
 
-function hideSignInButton() {
-  const btn = document.getElementById('googleSignInBtn');
-  if (btn) btn.style.display = 'none';
-}
-
-/* ---------- BOOT ---------- */
-window.addEventListener('load', async () => {
+/* ========== start app ========== */
+window.addEventListener('load', async ()=>{
   try {
-    await initializeGapiClient();
-    initializeTokenClient();
-
-    // If we can silently get a token (already consented once), do it and hide the button
-    try {
-      await ensureSignedIn();
-      hideSignInButton();
-    } catch (_) {
-      // Not signed in yet; button stays visible until user taps it.
-    }
-  } catch (e) {
-    console.error('Init error:', e);
-  }
-
+    await initGapi(); initGIS();
+    // try silent sign-in; if already granted, auto-prepare the sheet
+    try { await ensureSignedIn(); hideSignInButton(); await ensureSheetInitialized(); }
+    catch(_) { showSignInButton(); }
+  } catch(e) { setSyncStatus('Init failed','err'); }
   renderPurchases();
 });
