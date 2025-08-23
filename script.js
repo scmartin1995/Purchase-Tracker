@@ -7,12 +7,45 @@ const DISCOVERY_DOC = "https://sheets.googleapis.com/$discovery/rest?version=v4"
 const SPREADSHEET_ID = "173gOcUfK1Ff5JEPurWfGdSbZ8TF57laoczzwc_QumQQ";
 const SHEET_RANGE = "Sheet1!A:C"; // Date, Name, Amount
 
+// Allow a per-device override via localStorage (set by "Use a new Google Sheet")
+const LS_KEY_SHEET_OVERRIDE = "sheetOverride";
+let SPREADSHEET_ID = localStorage.getItem(LS_KEY_SHEET_OVERRIDE) || DEFAULT_SPREADSHEET_ID;
+
 // Local model: { name, amount, date, row? }
 let purchases = JSON.parse(localStorage.getItem("purchases")) || [];
 let burnupChart;
 let tokenClient;
 let gapiReady = false;
 let gisReady = false;
+
+/* ---------- Menu + pages ---------- */
+function toggleMenu(){
+  const m = document.getElementById('sideMenu');
+  const open = m.classList.toggle('open');
+  m.setAttribute('aria-hidden', open ? 'false' : 'true');
+}
+function goPage(name){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.getElementById(`page-${name}`).classList.add('active');
+}
+
+/* ---------- Modal (new sheet) ---------- */
+function openNewSheetModal(){
+  document.getElementById('sheetIdInput').value = SPREADSHEET_ID || '';
+  document.getElementById('modalOverlay').hidden = false;
+}
+function closeNewSheetModal(){
+  document.getElementById('modalOverlay').hidden = true;
+}
+function confirmNewSheet(){
+  const val = (document.getElementById('sheetIdInput').value || '').trim();
+  if(!val){ alert("Please paste a Spreadsheet ID."); return; }
+  if(!confirm("Switch to this Google Sheet for this device? Your local data stays the same.")) return;
+  localStorage.setItem(LS_KEY_SHEET_OVERRIDE, val);
+  SPREADSHEET_ID = val;
+  closeNewSheetModal();
+  setSyncStatus(`Now using sheet: ${val.slice(0,8)}…`, "ok");
+}
 
 /* ---------- UI helpers ---------- */
 function setSyncStatus(msg, cls = "") {
@@ -54,14 +87,8 @@ function renderPurchases() {
 function updateBurnupChart() {
   const ctx = document.getElementById("burnupChart").getContext("2d");
   const sorted = [...purchases].sort((a, b) => new Date(a.date) - new Date(b.date));
-  let labels = [],
-    data = [],
-    sum = 0;
-  sorted.forEach((p) => {
-    sum += parseFloat(p.amount || 0);
-    labels.push(p.date);
-    data.push(+sum.toFixed(2));
-  });
+  let labels = [], data = [], sum = 0;
+  sorted.forEach((p) => { sum += parseFloat(p.amount || 0); labels.push(p.date); data.push(+sum.toFixed(2)); });
   if (burnupChart) burnupChart.destroy();
   burnupChart = new Chart(ctx, {
     type: "line",
@@ -75,10 +102,7 @@ async function addPurchase() {
   const name = document.getElementById("itemName").value.trim();
   const amount = document.getElementById("itemAmount").value;
   const date = document.getElementById("itemDate").value;
-  if (!name || !amount || !date) {
-    alert("Please fill out all fields");
-    return;
-  }
+  if (!name || !amount || !date) { alert("Please fill out all fields"); return; }
 
   const purchase = { name, amount, date };
 
@@ -87,7 +111,6 @@ async function addPurchase() {
   document.getElementById("itemAmount").value = "";
   document.getElementById("itemDate").value = "";
 
-  // Add locally & render
   purchases.push(purchase);
   renderPurchases();
 
@@ -102,23 +125,17 @@ async function addPurchase() {
   }
 }
 
-/**
- * Delete a single purchase locally AND remove its exact row from Google Sheets.
- * - If we don't know its row yet (older entries), we try to reconcile first.
- * - After deleting a row in the sheet, all rows below shift up by 1, so we
- *   adjust stored row numbers accordingly.
- */
 async function deletePurchase(index) {
   const purchase = purchases[index];
 
-  // Optimistically update UI
+  // Optimistic UI
   purchases.splice(index, 1);
   renderPurchases();
 
   try {
     await ensureSignedIn();
 
-    // If this item doesn't have a row stored yet, reconcile to find it
+    // If we don't know the row yet, try to reconcile
     if (!purchase.row) {
       await reconcileLocalWithSheet();
     }
@@ -126,33 +143,22 @@ async function deletePurchase(index) {
     if (purchase.row) {
       await deleteRowOnSheet(purchase.row);
 
-      // Adjust remaining row indices (rows after the deleted one shift up by 1)
-      purchases.forEach((p) => {
-        if (p.row && p.row > purchase.row) p.row -= 1;
-      });
+      // Adjust remaining row numbers (rows below shift up by 1)
+      purchases.forEach((p) => { if (p.row && p.row > purchase.row) p.row -= 1; });
       saveLocal();
       setSyncStatus("Deleted on sheet ✓", "ok");
     } else {
-      // Couldn't determine original row; sheet might not contain it (or duplicate ambiguity)
-      setSyncStatus("Deleted locally (no matching row found)", "ok");
+      setSyncStatus("Deleted locally (no matching sheet row found)", "ok");
     }
   } catch (e) {
-    console.warn("Failed to delete on sheet", e);
+    console.warn("Delete on sheet failed", e);
     setSyncStatus("Delete on sheet failed ✗", "err");
   }
 }
 
-/**
- * Clear All: local only — DOES NOT touch Google Sheets.
- * Handy for a new pay period while preserving historical sheet data.
- */
+/** Clear All: local only — DOES NOT touch Google Sheets. */
 function clearPurchases() {
-  if (
-    !confirm(
-      "Clear all purchases on this device?\n\nThis will NOT delete anything from your Google Sheet."
-    )
-  )
-    return;
+  if (!confirm("Clear all purchases on this device?\n\nThis will NOT delete anything from your Google Sheet.")) return;
   purchases = [];
   localStorage.removeItem("purchases");
   renderPurchases();
@@ -168,9 +174,7 @@ function initGapi() {
         await gapi.client.init({ discoveryDocs: [DISCOVERY_DOC] }); // no API key needed
         gapiReady = true;
         resolve();
-      } catch (e) {
-        reject(e);
-      }
+      } catch (e) { reject(e); }
     });
   });
 }
@@ -179,7 +183,7 @@ function initGIS() {
   tokenClient = google.accounts.oauth2.initTokenClient({
     client_id: CLIENT_ID,
     scope: SCOPES,
-    prompt: "", // silent after first consent
+    prompt: "",
     callback: (resp) => {
       if (resp.error) return;
       gapi.client.setToken({ access_token: resp.access_token });
@@ -191,10 +195,7 @@ function initGIS() {
 }
 
 async function googleSignIn() {
-  if (!gapiReady || !gisReady) {
-    alert("Still loading Google services. Try again in a second.");
-    return;
-  }
+  if (!gapiReady || !gisReady) { alert("Still loading Google services. Try again in a second."); return; }
   tokenClient.requestAccessToken({ prompt: "consent" });
 }
 
@@ -206,10 +207,6 @@ async function ensureSignedIn() {
 }
 
 /* ---------- Sheets helpers ---------- */
-
-/**
- * Append a row to the sheet and return its 1-based row number.
- */
 async function appendRowToSheet(p) {
   await ensureSignedIn();
   setSyncStatus("Syncing to Google Sheets…");
@@ -223,103 +220,76 @@ async function appendRowToSheet(p) {
   const upd = resp.result && resp.result.updates;
   let rowNum = null;
   if (upd && upd.updatedRange) {
-    // e.g., "Sheet1!A2:C2" -> pick "2"
-    const m = upd.updatedRange.match(/!A(\d+):/i);
+    const m = upd.updatedRange.match(/!A(\d+):/i); // e.g., "Sheet1!A2:C2"
     if (m) rowNum = parseInt(m[1], 10);
   }
   return rowNum;
 }
 
-/**
- * Delete a specific 1-based row from the sheet using batchUpdate.
- */
 async function deleteRowOnSheet(rowNumber1Based) {
-  // We need the numeric sheetId; get metadata for Sheet1
+  // Need the numeric sheetId for "Sheet1"
   const meta = await gapi.client.sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID });
-  const sheet = (meta.result.sheets || []).find(
-    (s) => s.properties && s.properties.title === "Sheet1"
-  );
+  const sheet = (meta.result.sheets || []).find(s => s.properties?.title === "Sheet1");
   if (!sheet) throw new Error("Sheet1 not found");
   const sheetId = sheet.properties.sheetId;
 
   const req = {
     spreadsheetId: SPREADSHEET_ID,
     resource: {
-      requests: [
-        {
-          deleteDimension: {
-            range: {
-              sheetId,
-              dimension: "ROWS",
-              startIndex: rowNumber1Based - 1, // zero-based inclusive
-              endIndex: rowNumber1Based, // zero-based exclusive
-            },
-          },
-        },
-      ],
-    },
+      requests: [{
+        deleteDimension: {
+          range: { sheetId, dimension: "ROWS", startIndex: rowNumber1Based - 1, endIndex: rowNumber1Based }
+        }
+      }]
+    }
   };
   await gapi.client.sheets.spreadsheets.batchUpdate(req);
 }
 
-/**
- * Reconcile local purchases without `row` against the current sheet rows,
- * matching on (Date, Name, Amount). Handles duplicates by assigning the
- * first unmatched matching row. Best-effort.
- */
+/** Reconcile local items (without `row`) to sheet rows (by date+name+amount). */
 async function reconcileLocalWithSheet() {
   await ensureSignedIn();
-  // Read all rows (skip header): A2:C
   const resp = await gapi.client.sheets.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
     range: "Sheet1!A2:C",
   });
   const values = resp.result.values || [];
-
-  // Build an index of rows -> { date, name, amount, rowNumber }
   const sheetRows = values.map((r, idx) => {
     const [date = "", name = "", amount = ""] = r;
-    return {
-      date: (date || "").trim(),
-      name: (name || "").trim(),
-      amount: normalizeAmount(amount),
-      rowNumber: idx + 2, // A2 is row 2
-      matched: false,
-    };
+    return { date: (date || "").trim(), name: (name || "").trim(), amount: normalizeAmount(amount), rowNumber: idx + 2, matched:false };
   });
-
-  // For each local item missing row, try to find the first unmatched identical triple
-  purchases.forEach((p) => {
+  purchases.forEach(p => {
     if (p.row) return;
-    const target = {
-      date: (p.date || "").trim(),
-      name: (p.name || "").trim(),
-      amount: normalizeAmount(p.amount),
-    };
-    const found = sheetRows.find(
-      (s) =>
-        !s.matched &&
-        s.date === target.date &&
-        s.name === target.name &&
-        s.amount === target.amount
-    );
-    if (found) {
-      p.row = found.rowNumber;
-      found.matched = true;
-    }
+    const t = { date:(p.date||"").trim(), name:(p.name||"").trim(), amount:normalizeAmount(p.amount) };
+    const found = sheetRows.find(s => !s.matched && s.date===t.date && s.name===t.name && s.amount===t.amount);
+    if (found){ p.row = found.rowNumber; found.matched = true; }
   });
-
   saveLocal();
 }
 
 /* ---------- Utils ---------- */
-function normalizeAmount(a) {
-  const n = typeof a === "string" ? a.replace(/[, ]/g, "") : a;
-  const num = Number(n || 0);
-  return num.toFixed(2); // compare as fixed-2 strings
+function normalizeAmount(a){ const n = typeof a==="string" ? a.replace(/[, ]/g,"") : a; const num = Number(n || 0); return num.toFixed(2); }
+
+/* ---------- Sign out & clear ---------- */
+async function signOutAndClear(){
+  try {
+    const token = gapi.client.getToken();
+    if (token?.access_token && google?.accounts?.oauth2?.revoke) {
+      await new Promise(res => google.accounts.oauth2.revoke(token.access_token, res));
+    }
+  } catch {}
+  gapi.client.setToken(null);
+  localStorage.removeItem("purchases");
+  localStorage.removeItem(LS_KEY_SHEET_OVERRIDE);
+  purchases = [];
+  SPREADSHEET_ID = DEFAULT_SPREADSHEET_ID;
+  renderPurchases();
+  const btn = document.getElementById("googleSignInBtn");
+  if (btn) btn.style.display = "";
+  setSyncStatus("Signed out & cleared this device", "ok");
 }
 
-/* ---------- Boot ---------- */
+/* ---------- Boot + token refresh ---------- */
 window.addEventListener("load", async () => {
   try {
     await initGapi();
@@ -328,12 +298,8 @@ window.addEventListener("load", async () => {
       await ensureSignedIn();
       const btn = document.getElementById("googleSignInBtn");
       if (btn) btn.style.display = "none";
-
-      // Best-effort reconciliation for older local items (ensures correct row deletes)
-      await reconcileLocalWithSheet();
-    } catch (_) {
-      // Not signed in yet; that's fine.
-    }
+      await reconcileLocalWithSheet(); // attach rows to older local items
+    } catch (_) { /* not signed in yet */ }
   } catch (e) {
     console.error("Init error", e);
     setSyncStatus("Init failed", "err");
@@ -341,7 +307,6 @@ window.addEventListener("load", async () => {
   renderPurchases();
 });
 
-/* ---------- Also refresh token silently on focus (helps PWAs) ---------- */
 document.addEventListener("visibilitychange", async () => {
   if (document.visibilityState === "visible") {
     try {
