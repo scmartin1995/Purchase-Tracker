@@ -84,6 +84,16 @@ function clearPurchases(){
   }
 }
 
+function resetSheet(){
+  if(!confirm('Use a new Google Sheet?')) return;
+  SPREADSHEET_ID = null;
+  localStorage.removeItem('userSheetId');
+  setSyncStatus('Sheet reset. Please sign in again','err');
+  const btn = document.getElementById('googleSignInBtn');
+  if (btn) btn.style.display = '';
+}
+window.resetSheet = resetSheet;
+
 function initGapi() {
   return new Promise((resolve,reject)=>{
     if(!window.gapi) return reject(new Error("gapi not loaded"));
