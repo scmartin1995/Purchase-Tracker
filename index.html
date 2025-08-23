@@ -43,7 +43,7 @@
     </button>
   </header>
 
-  <!-- Side menu -->
+  <!-- Side menu (no new-sheet option) -->
   <nav id="sideMenu" class="side-menu" aria-hidden="true">
     <div class="menu-header">
       <strong>Menu</strong>
@@ -52,25 +52,23 @@
       </button>
     </div>
     <ul>
-      <li><button class="menu-link" onclick="goPage('home'); toggleMenu();"><span class="material-symbols-outlined">home</span> Home</button></li>
-      <li><button class="menu-link" onclick="goPage('purchases'); toggleMenu();"><span class="material-symbols-outlined">receipt_long</span> Purchases</button></li>
-      <li><button class="menu-link warn" onclick="openNewSheetModal();"><span class="material-symbols-outlined">post_add</span> Use a new Google Sheet…</button></li>
-      <li><button class="menu-link danger" onclick="signOutAndClear();"><span class="material-symbols-outlined">logout</span> Sign out & clear this device</button></li>
+      <li>
+        <button class="menu-link" onclick="goPage('home'); toggleMenu();">
+          <span class="material-symbols-outlined">home</span> Home
+        </button>
+      </li>
+      <li>
+        <button class="menu-link" onclick="goPage('purchases'); toggleMenu();">
+          <span class="material-symbols-outlined">receipt_long</span> Purchases
+        </button>
+      </li>
+      <li>
+        <button class="menu-link danger" onclick="signOutAndClear();">
+          <span class="material-symbols-outlined">logout</span> Sign out & clear this device
+        </button>
+      </li>
     </ul>
   </nav>
-
-  <!-- New Sheet Modal -->
-  <div id="modalOverlay" class="modal-overlay" hidden>
-    <div class="modal">
-      <h2>Use a new Google Sheet</h2>
-      <p>Enter the <b>Spreadsheet ID</b> (text between <code>/d/</code> and <code>/edit</code> in the Sheet URL). This overrides the hardcoded Sheet for this device only.</p>
-      <input id="sheetIdInput" placeholder="e.g. 1AbCDeFg...XYZ" />
-      <div class="modal-actions">
-        <button class="btn" onclick="closeNewSheetModal()">Cancel</button>
-        <button class="btn primary" onclick="confirmNewSheet()">Switch Sheet</button>
-      </div>
-    </div>
-  </div>
 
   <!-- Pages -->
   <main id="page-home" class="page active">
