@@ -1,4 +1,4 @@
-const CACHE_NAME = "purchase-tracker-hardcoded-material-v4"; // bumped so new files load
+const CACHE_NAME = "purchase-tracker-hardcoded-material-v5"; // bumped
 const ASSETS = [
   "./",
   "./index.html",
