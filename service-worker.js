@@ -1,4 +1,4 @@
-const CACHE_NAME = "purchase-tracker-cache-v3"; // ⬅ bump this each release
+const CACHE_NAME = "purchase-tracker-cache-v8";  /* change this to any new value */
 const ASSETS = [
   "./",
   "./index.html",
