@@ -10,6 +10,7 @@ let tokenClient;
 let gapiReady = false;
 let gisReady = false;
 let SPREADSHEET_ID = localStorage.getItem('userSheetId') || null;
+let tokenExpiresAt = 0;
 
 function setSyncStatus(msg, cls="") {
   const el = document.getElementById('syncStatus');
@@ -86,6 +87,11 @@ function clearPurchases(){
 
 function resetSheet(){
   if(!confirm('Use a new Google Sheet?')) return;
+  const token = gapi.client.getToken();
+  if (token?.access_token) {
+    try { google.accounts.oauth2.revoke(token.access_token); } catch (_) {}
+  }
+  gapi.client.setToken(null);
   SPREADSHEET_ID = null;
   localStorage.removeItem('userSheetId');
   setSyncStatus('Sheet reset. Please sign in again','err');
@@ -114,6 +120,8 @@ function initGIS() {
     callback: (resp)=>{
       if(resp.error) return;
       gapi.client.setToken({ access_token: resp.access_token });
+      const expiresIn = (resp.expires_in || 0) * 1000;
+      tokenExpiresAt = Date.now() + expiresIn;
       document.getElementById('googleSignInBtn').style.display = 'none';
       ensureSheetInitialized().catch(()=>{});
     }
@@ -131,8 +139,8 @@ async function googleSignIn() {
 
 async function ensureSignedIn(){
   const token = gapi.client.getToken();
-  if (token?.access_token) return;
-  tokenClient.requestAccessToken({ prompt:'' });
+  if (token?.access_token && tokenExpiresAt && Date.now() < tokenExpiresAt - 5000) return;
+  tokenClient.requestAccessToken({ prompt:'consent' });
   await new Promise(r=>setTimeout(r,700));
 }
 
