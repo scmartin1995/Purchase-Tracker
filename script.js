@@ -1,6 +1,8 @@
-// ===== Per-user Sheet: auto-create on first sign-in =====
+// ===== Per-user Sheet: auto-create on first sign-in (with drive.file scope & fallback button) =====
 const CLIENT_ID = "624129803500-p9iq7i2mbngcr5ut675cg4n23mbhsajo.apps.googleusercontent.com"; // <-- put yours
-const SCOPES = "https://www.googleapis.com/auth/spreadsheets";
+
+// Add drive.file so we can create a file in the user's Drive
+const SCOPES = "https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file";
 const DISCOVERY_DOC = "https://sheets.googleapis.com/$discovery/rest?version=v4";
 
 const SHEET_TITLE = "Sheet1";
@@ -20,6 +22,22 @@ let gisReady = false;
 let SPREADSHEET_ID = localStorage.getItem(LS_KEY_SHEET_ID) || null;
 let SHEET_GID = localStorage.getItem(LS_KEY_SHEET_GID) || null; // numeric sheetId (gid)
 
+/* ---------- Small helpers ---------- */
+const statusEl = () => document.getElementById("syncStatus");
+function setSyncStatus(msg, cls = "") {
+  const el = statusEl();
+  if (!el) return;
+  el.className = "status " + cls;
+  el.textContent = msg;
+}
+function showSheetHelper(show) {
+  const el = document.getElementById("sheetHelper");
+  if (el) el.style.display = show ? "block" : "none";
+}
+function saveLocal() {
+  localStorage.setItem("purchases", JSON.stringify(purchases));
+}
+
 /* ---------- Menu + pages ---------- */
 function toggleMenu(){
   const m = document.getElementById('sideMenu');
@@ -29,17 +47,6 @@ function toggleMenu(){
 function goPage(name){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.getElementById(`page-${name}`).classList.add('active');
-}
-
-/* ---------- UI helpers ---------- */
-function setSyncStatus(msg, cls = "") {
-  const el = document.getElementById("syncStatus");
-  if (!el) return;
-  el.className = "status " + cls;
-  el.textContent = msg;
-}
-function saveLocal() {
-  localStorage.setItem("purchases", JSON.stringify(purchases));
 }
 
 /* ---------- Render ---------- */
@@ -164,14 +171,19 @@ function initGIS() {
   tokenClient = google.accounts.oauth2.initTokenClient({
     client_id: CLIENT_ID,
     scope: SCOPES,
-    prompt: "",
-    callback: (resp) => {
-      if (resp.error) return;
+    prompt: "", // after first consent, will be silent
+    callback: async (resp) => {
+      if (resp.error) { console.warn("GIS token error", resp.error); return; }
       gapi.client.setToken({ access_token: resp.access_token });
       const btn = document.getElementById("googleSignInBtn");
       if (btn) btn.style.display = "none";
-      // after token, ensure sheet exists for this user/device
-      ensureSheetInitialized().catch(()=>{});
+      try {
+        await ensureSheetInitialized(); // create or link user sheet
+      } catch (e) {
+        console.warn("ensureSheetInitialized failed", e);
+        setSyncStatus("Could not set up your Google Sheet", "err");
+        showSheetHelper(true); // show manual create button
+      }
     },
   });
   gisReady = true;
@@ -189,33 +201,54 @@ async function ensureSignedIn() {
   await new Promise((r) => setTimeout(r, 700));
 }
 
+/* ---------- Manual fallback button ---------- */
+async function manualCreateSheet(){
+  try{
+    await ensureSignedIn();
+    await ensureSheetInitialized(true); // force create if missing
+    showSheetHelper(false);
+    setSyncStatus("Sheet ready ✓", "ok");
+  }catch(e){
+    console.warn("Manual sheet creation failed", e);
+    setSyncStatus("Still couldn’t create your Sheet. Check Google permissions.", "err");
+  }
+}
+
 /* ---------- Per-user Sheet helpers ---------- */
-async function ensureSheetInitialized(){
+async function ensureSheetInitialized(forceCreate=false){
   await ensureSignedIn();
-  if (!SPREADSHEET_ID) {
-    setSyncStatus("Creating your Google Sheet…");
-    const { id, gid } = await createSpreadsheet();
-    SPREADSHEET_ID = id;
-    SHEET_GID = gid;
-    localStorage.setItem(LS_KEY_SHEET_ID, id);
-    localStorage.setItem(LS_KEY_SHEET_GID, gid);
-    // Write header row
-    await gapi.client.sheets.spreadsheets.values.update({
-      spreadsheetId: SPREADSHEET_ID,
-      range: `${SHEET_TITLE}!A1:C1`,
-      valueInputOption: "RAW",
-      resource: { values: [["Date","Name","Amount"]] }
-    });
-    setSyncStatus("Sheet created ✓", "ok");
+
+  // If we already have a sheet ID stored, just make sure gid is known
+  if (SPREADSHEET_ID && !forceCreate) {
+    if (!SHEET_GID) {
+      SHEET_GID = await fetchSheetGid();
+      localStorage.setItem(LS_KEY_SHEET_GID, SHEET_GID);
+    }
+    return SPREADSHEET_ID;
   }
-  if (!SHEET_GID) {
-    SHEET_GID = await fetchSheetGid();
-    localStorage.setItem(LS_KEY_SHEET_GID, SHEET_GID);
-  }
+
+  // Create a fresh spreadsheet
+  setSyncStatus("Creating your Google Sheet…");
+  const { id, gid } = await createSpreadsheet();
+  SPREADSHEET_ID = id;
+  SHEET_GID = gid;
+  localStorage.setItem(LS_KEY_SHEET_ID, id);
+  localStorage.setItem(LS_KEY_SHEET_GID, gid);
+
+  // Write header row
+  await gapi.client.sheets.spreadsheets.values.update({
+    spreadsheetId: SPREADSHEET_ID,
+    range: `${SHEET_TITLE}!A1:C1`,
+    valueInputOption: "RAW",
+    resource: { values: [["Date","Name","Amount"]] }
+  });
+
+  setSyncStatus("Sheet created ✓", "ok");
   return SPREADSHEET_ID;
 }
 
 async function createSpreadsheet(){
+  // Title includes today for clarity; file will be owned by the signed-in user
   const title = `Purchase Tracker (${new Date().toLocaleDateString()})`;
   const res = await gapi.client.sheets.spreadsheets.create({
     properties: { title },
