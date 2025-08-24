@@ -1,4 +1,4 @@
-const CACHE_NAME = "purchase-tracker-auto-sheet-v1"; // new cache name
+const CACHE_NAME = "purchase-tracker-auto-sheet-v2"; // new cache name
 const ASSETS = [
   "./",
   "./index.html",
