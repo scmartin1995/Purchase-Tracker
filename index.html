@@ -97,6 +97,13 @@
           <span>Clear All (local)</span>
         </button>
       </div>
+
+      <!-- If sheet creation ever fails, this appears -->
+      <div id="sheetHelper" class="status" style="display:none;">
+        Couldn’t create your Google Sheet automatically.
+        <button class="btn primary" onclick="manualCreateSheet()">Create My Sheet</button>
+      </div>
+
       <div id="syncStatus" class="status">Not synced yet</div>
     </section>
 
