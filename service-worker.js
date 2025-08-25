@@ -20,8 +20,8 @@ messaging.onBackgroundMessage((payload) => {
   const data  = payload?.data || {};
   self.registration.showNotification(title, {
     body,
-    icon: '/<repo>/icons/icon-192.png',   // ← adjust for your repo path
-    badge: '/<repo>/icons/badge-72.png',  // ← adjust for your repo path
+    icon: '/purchase-tracker/icons/icon-192.png',   // ← adjust for your repo path
+    badge: '/purchase-tracker/icons/badge-72.png',  // ← adjust for your repo path
     data
   });
 });
