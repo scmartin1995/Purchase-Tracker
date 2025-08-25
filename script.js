@@ -375,3 +375,16 @@ document.addEventListener("visibilitychange", async () => {
 window.addEventListener("focus", async () => {
   try { await ensureSignedIn(); const btn = document.getElementById("googleSignInBtn"); if (btn) btn.style.display = "none"; } catch (_) {}
 });
+
+// --- Register the service worker (for caching + push) ---
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker
+    .register('/purchase-tracker/service-worker.js', { scope: '/purchase-tracker/' })
+    .then(() => {
+      console.log('Service worker registered for /purchase-tracker/');
+    })
+    .catch((err) => {
+      console.error('Service worker registration failed:', err);
+    });
+}
+
