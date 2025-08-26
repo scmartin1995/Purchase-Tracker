@@ -1,3 +1,37 @@
+/* --- Firebase Messaging (Web Push) --- */
+importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js');
+
+firebase.initializeApp({
+  apiKey: "AIzaSyBVPS_83-sIyIOl9hDijMv6PrEk5ZEg6UU",
+  authDomain: "purchase-tracker-870e3.firebaseapp.com",
+  projectId: "purchase-tracker-870e3",
+  messagingSenderId: "405147850307",
+  appId: "1:405147850307:web:be83d37450cb8274f7e6f6"
+});
+
+const messaging = firebase.messaging();
+
+messaging.onBackgroundMessage((payload) => {
+  const title = (payload && payload.notification && payload.notification.title) || 'Purchase Tracker';
+  const body  = (payload && payload.notification && payload.notification.body)  || 'Update';
+  const data  = (payload && payload.data) || {};
+  self.registration.showNotification(title, {
+    body,
+    icon: '/purchase-tracker/icon-192.png',
+    badge: '/purchase-tracker/icon-192.png',
+    data
+  });
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || '/purchase-tracker/';
+  event.waitUntil(clients.openWindow(url));
+});
+/* --- end Firebase Messaging block --- */
+
+
 const CACHE_NAME = "purchase-tracker-auto-sheet-v2"; // new cache name
 const ASSETS = [
   "./",
