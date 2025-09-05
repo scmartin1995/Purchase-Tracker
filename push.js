@@ -23,8 +23,7 @@ if (!firebase.apps?.length) {
 const messaging = firebase.messaging();
 
 // ---- Your PUBLIC VAPID key (Firebase Console → Cloud Messaging → Web configuration) ----
-const VAPID_KEY = "BETwPkGxw_FnJF5PqJNjsLpNdMHZvOQNlekeYiTjp2Lwrx-c35doqh2-IGY9dbYholTzZZL1srUJdmfCyGk0yYQ"
-;
+const VAPID_KEY = "BETwPkGxw_FnJF5PqJNjsLpNdMHZvOQNlekeYiTjp2Lwrx-c35doqh2-IGY9dbYholTzZZL1srUJdmfCyGk0yYQ";
 
 // Derive the base path so this works at "/" or "/purchase-tracker/"
 const basePath = location.pathname.startsWith('/purchase-tracker/') ? '/purchase-tracker/' : '/';
