@@ -28,13 +28,24 @@ const VAPID_KEY = "BETwPkGxw_FnJF5PqJNjsLpNdMHZvOQNlekeYiTjp2Lwrx-c35doqh2-IGY9d
 // Derive the base path so this works at "/" or "/purchase-tracker/"
 const basePath = location.pathname.startsWith('/purchase-tracker/') ? '/purchase-tracker/' : '/';
 
-// Register the FCM service worker under the correct scope
+// Register the FCM service worker (robust: tries root, then /purchase-tracker/)
 async function getSwReg() {
   if (!('serviceWorker' in navigator)) {
     throw new Error('Service workers are not supported in this browser.');
   }
-return navigator.serviceWorker.register('/purchase-tracker/firebase-messaging-sw.js', {
-  scope: '/purchase-tracker/';
+  const candidates = [
+    { script: '/firebase-messaging-sw.js', scope: '/' },
+    { script: '/purchase-tracker/firebase-messaging-sw.js', scope: '/purchase-tracker/' },
+  ];
+  for (const c of candidates) {
+    try {
+      const reg = await navigator.serviceWorker.register(c.script, { scope: c.scope });
+      return reg;
+    } catch (_) {
+      // keep trying the next candidate
+    }
+  }
+  throw new Error('Could not find firebase-messaging-sw.js at / or /purchase-tracker/.');
 }
 
 // Ask permission + fetch/store token
@@ -57,7 +68,7 @@ async function enablePush() {
 
     // Get an FCM token bound to this SW registration
     const token = await messaging.getToken({
-      vapidKey: VAPID_KEY,
+      vapidKey: VAPID_KEY,                  // make sure VAPID_KEY is a QUOTED string above
       serviceWorkerRegistration: swReg,
     });
 
@@ -69,9 +80,6 @@ async function enablePush() {
     console.log('🔑 FCM token:', token);
     localStorage.setItem('fcmToken', token);
     alert('Push enabled! Token saved locally and printed in the console.');
-
-    // OPTIONAL: send token to your backend / Google Sheet
-    // await fetch('YOUR_WEBHOOK_URL', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ token }) });
   } catch (err) {
     console.error('enablePush error:', err);
     alert('Enable push failed — check the console for details.');
@@ -83,9 +91,10 @@ messaging.onMessage((payload) => {
   console.log('📩 Foreground message:', payload);
   if (Notification.permission === 'granted') {
     try {
+      const iconBase = (typeof basePath === 'string') ? basePath : '/';
       new Notification(payload.notification?.title || 'New message', {
         body: payload.notification?.body || '',
-      icon: `${basePath}icon-192.png`,
+        icon: `${iconBase}icon-192.png`,
         data: payload.data || {},
       });
     } catch (_) {
