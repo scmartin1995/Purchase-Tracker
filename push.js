@@ -25,27 +25,27 @@ const messaging = firebase.messaging();
 // ---- Your PUBLIC VAPID key (Firebase Console → Cloud Messaging → Web configuration) ----
 const VAPID_KEY = "BETwPkGxw_FnJF5PqJNjsLpNdMHZvOQNlekeYiTjp2Lwrx-c35doqh2-IGY9dbYholTzZZL1srUJdmfCyGk0yYQ";
 
-// Derive the base path so this works at "/" or "/purchase-tracker/"
-const basePath = location.pathname.startsWith('/purchase-tracker/') ? '/purchase-tracker/' : '/';
+// use the current page's folder exactly as-is (preserves capitalization)
+const basePath = location.pathname.replace(/[^/]*$/, '');
 
-// Register the FCM service worker (robust: tries root, then /purchase-tracker/)
+// Register the FCM service worker using the detected basePath, then fall back to root
 async function getSwReg() {
   if (!('serviceWorker' in navigator)) {
     throw new Error('Service workers are not supported in this browser.');
   }
   const candidates = [
-    { script: '/firebase-messaging-sw.js', scope: '/' },
-    { script: '/purchase-tracker/firebase-messaging-sw.js', scope: '/purchase-tracker/' },
+    { script: `${basePath}firebase-messaging-sw.js`, scope: basePath }, // e.g. /Purchase-Tracker/
+    { script: '/firebase-messaging-sw.js', scope: '/' },                // root fallback
   ];
   for (const c of candidates) {
     try {
       const reg = await navigator.serviceWorker.register(c.script, { scope: c.scope });
       return reg;
     } catch (_) {
-      // keep trying the next candidate
+      // try next
     }
   }
-  throw new Error('Could not find firebase-messaging-sw.js at / or /purchase-tracker/.');
+  throw new Error(`Could not find firebase-messaging-sw.js at ${basePath} or /`);
 }
 
 // Ask permission + fetch/store token
