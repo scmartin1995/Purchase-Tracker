@@ -34,7 +34,8 @@ async function getSwReg() {
   if (!('serviceWorker' in navigator)) {
     throw new Error('Service workers are not supported in this browser.');
   }
-  return navigator.serviceWorker.register(`${basePath}firebase-messaging-sw.js`, { scope: basePath });
+return navigator.serviceWorker.register('/purchase-tracker/firebase-messaging-sw.js', {
+  scope: '/purchase-tracker/';
 }
 
 // Ask permission + fetch/store token
