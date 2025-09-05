@@ -23,7 +23,7 @@ if (!firebase.apps?.length) {
 const messaging = firebase.messaging();
 
 // ---- Your PUBLIC VAPID key (Firebase Console → Cloud Messaging → Web configuration) ----
-const VAPID_KEY = BETwPkGxw_FnJF5PqJNjsLpNdMHZvOQNlekeYiTjp2Lwrx-c35doqh2-IGY9dbYholTzZZL1srUJdmfCyGk0yYQ
+const VAPID_KEY = "BETwPkGxw_FnJF5PqJNjsLpNdMHZvOQNlekeYiTjp2Lwrx-c35doqh2-IGY9dbYholTzZZL1srUJdmfCyGk0yYQ"
 ;
 
 // Derive the base path so this works at "/" or "/purchase-tracker/"
@@ -85,7 +85,7 @@ messaging.onMessage((payload) => {
     try {
       new Notification(payload.notification?.title || 'New message', {
         body: payload.notification?.body || '',
-        icon: `${basePath}icons/icon-192.png`,
+      icon: `${basePath}icon-192.png`,
         data: payload.data || {},
       });
     } catch (_) {
