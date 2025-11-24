@@ -22,7 +22,7 @@
   <script src="https://apis.google.com/js/api.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 
-  <!-- Content Security Policy: locked to self + specific Google/CDN domains used by this app -->
+  <!-- Content Security Policy: scoped to self + Google/CDN domains actually used -->
   <meta http-equiv="Content-Security-Policy"
         content="
           default-src 'self';
@@ -30,16 +30,19 @@
                      https://apis.google.com
                      https://accounts.google.com
                      https://www.gstatic.com
+                     https://ssl.gstatic.com
                      https://cdn.jsdelivr.net;
           connect-src 'self'
                       https://sheets.googleapis.com
                       https://www.googleapis.com
                       https://oauth2.googleapis.com
                       https://accounts.google.com
-                      https://www.gstatic.com;
+                      https://www.gstatic.com
+                      https://ssl.gstatic.com;
           img-src 'self' data:
                   https://accounts.google.com
-                  https://www.gstatic.com;
+                  https://www.gstatic.com
+                  https://ssl.gstatic.com;
           style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
           font-src 'self' https://fonts.gstatic.com;
           frame-src 'self'

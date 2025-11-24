@@ -89,13 +89,6 @@ input, select{width:100%; padding:12px; border:1px solid var(--md-outline); bord
 .menu-link.warn{background:#fff9e6; border-color:#ffe4a3}
 .menu-link.danger{background:#ffe6e9; border-color:#ffc2c8}
 
-/* Modal (reserved for future use) */
-.modal-overlay{position:fixed; inset:0; background:rgba(0,0,0,.25); display:flex; align-items:center; justify-content:center; z-index:200}
-.modal{background:var(--md-surface); border:1px solid var(--md-outline); border-radius:var(--radius-md); padding:18px; width:min(92vw, 480px); box-shadow:var(--shadow-2)}
-.modal h2{margin:0 0 8px 0; font-size:1.2rem}
-.modal p{margin:6px 0 10px 0; color:var(--md-subtle)}
-.modal-actions{display:flex; gap:10px; justify-content:flex-end; margin-top:12px}
-
 /* Category summary */
 .category-row{margin-top:8px;}
 .category-row select{width:100%;}

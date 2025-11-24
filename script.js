@@ -219,13 +219,19 @@ function clearPurchases() {
 
 function initGapi() {
   return new Promise((resolve, reject) => {
-    if (!window.gapi) return reject(new Error("gapi not loaded"));
+    if (!window.gapi) {
+      console.error("gapi global not found; Google API script may be blocked.");
+      return reject(new Error("gapi not loaded"));
+    }
     gapi.load("client", async () => {
       try {
         await gapi.client.init({ discoveryDocs: [DISCOVERY_DOC] });
         gapiReady = true;
         resolve();
-      } catch (e) { reject(e); }
+      } catch (e) {
+        console.error("gapi.client.init failed", e);
+        reject(e);
+      }
     });
   });
 }
@@ -265,9 +271,14 @@ function initGIS() {
 }
 
 async function googleSignIn() {
+  // If gapi isn't ready, try to init it *on demand*
   if (!gapiReady) {
-    alert("Still loading Google services. Try again in a second.");
-    return;
+    try {
+      await initGapi();
+    } catch (e) {
+      alert("Google libraries failed to load. Check your network and browser console.");
+      return;
+    }
   }
 
   if (!tokenClient) {
@@ -275,7 +286,7 @@ async function googleSignIn() {
   }
 
   if (!tokenClient) {
-    alert("Google sign-in is still starting up. Try again in a second.");
+    alert("Google sign-in is still starting up. Check the console for CSP or network errors.");
     return;
   }
 
@@ -456,7 +467,12 @@ async function signOutAndClear(){
 
 window.addEventListener("load", async () => {
   try {
-    await initGapi();
+    // Best-effort init; if it fails, googleSignIn() will retry
+    try {
+      await initGapi();
+    } catch (e) {
+      console.warn("Initial gapi init failed; will retry on sign-in.", e);
+    }
     initGIS();
     if (isAuthSessionValid()) {
       try {
