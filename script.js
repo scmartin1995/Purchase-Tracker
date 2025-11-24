@@ -17,7 +17,6 @@ let purchases = JSON.parse(localStorage.getItem("purchases")) || [];
 let burnupChart;
 let tokenClient;
 let gapiReady = false;
-let gisReady = false;
 let isExplicitLogin = false;
 
 let SPREADSHEET_ID = localStorage.getItem(LS_KEY_SHEET_ID) || null;
@@ -229,7 +228,12 @@ function initGapi() {
 }
 
 function initGIS() {
-  if (!window.google || !google.accounts?.oauth2) throw new Error("GIS not loaded");
+  // If the Google Identity script isn't ready yet, just bail quietly.
+  if (!window.google || !google.accounts?.oauth2) {
+    console.warn("GIS not loaded yet; will try again on first sign-in click.");
+    return;
+  }
+
   tokenClient = google.accounts.oauth2.initTokenClient({
     client_id: CLIENT_ID,
     scope: SCOPES,
@@ -256,14 +260,24 @@ function initGIS() {
       }
     },
   });
-  gisReady = true;
 }
 
 async function googleSignIn() {
-  if (!gapiReady || !gisReady) {
+  if (!gapiReady) {
     alert("Still loading Google services. Try again in a second.");
     return;
   }
+
+  // Lazy-init GIS if needed
+  if (!tokenClient) {
+    initGIS();
+  }
+
+  if (!tokenClient) {
+    alert("Google sign-in is still starting up. Try again in a second.");
+    return;
+  }
+
   isExplicitLogin = true;
   tokenClient.requestAccessToken({ prompt: "consent" });
 }
@@ -272,6 +286,12 @@ async function ensureSignedIn() {
   if (!isAuthSessionValid()) return;
   const token = gapi.client.getToken();
   if (token?.access_token) return;
+
+  if (!tokenClient) {
+    initGIS();
+  }
+  if (!tokenClient) return;
+
   tokenClient.requestAccessToken({ prompt: "" });
   await new Promise((r) => setTimeout(r, 700));
 }
