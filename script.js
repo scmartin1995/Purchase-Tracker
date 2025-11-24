@@ -59,6 +59,7 @@ function goPage(name){
     renderCategorySummary();
   }
 }
+
 function renderPurchases() {
   const list = document.getElementById("purchaseList");
   const totalDisplay = document.getElementById("totalSpent");
@@ -140,6 +141,7 @@ function renderCategorySummary() {
     tbody.appendChild(tr);
   });
 }
+
 async function addPurchase() {
   const nameInput = document.getElementById("itemName");
   const amountInput = document.getElementById("itemAmount");
@@ -214,6 +216,7 @@ function clearPurchases() {
   renderPurchases();
   setSyncStatus("Cleared local data only", "ok");
 }
+
 function initGapi() {
   return new Promise((resolve, reject) => {
     if (!window.gapi) return reject(new Error("gapi not loaded"));
@@ -228,7 +231,6 @@ function initGapi() {
 }
 
 function initGIS() {
-  // If the Google Identity script isn't ready yet, just bail quietly.
   if (!window.google || !google.accounts?.oauth2) {
     console.warn("GIS not loaded yet; will try again on first sign-in click.");
     return;
@@ -268,7 +270,6 @@ async function googleSignIn() {
     return;
   }
 
-  // Lazy-init GIS if needed
   if (!tokenClient) {
     initGIS();
   }
@@ -307,6 +308,7 @@ async function manualCreateSheet(){
     setSyncStatus("Still couldn’t create your Sheet. Check Google permissions.", "err");
   }
 }
+
 async function ensureSheetInitialized(forceCreate=false){
   await ensureSignedIn();
   if (SPREADSHEET_ID && !forceCreate) {
