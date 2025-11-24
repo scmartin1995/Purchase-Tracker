@@ -1,4 +1,4 @@
-const CACHE_NAME = "purchase-tracker-auto-sheet-v5";
+const CACHE_NAME = "purchase-tracker-auto-sheet-v6";
 const ASSETS = [
   "./",
   "./index.html",
