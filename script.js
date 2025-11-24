@@ -1,6 +1,5 @@
-// ===== Per-user Sheet: auto-create on first sign-in (with drive.file scope & fallback button) =====
-const CLIENT_ID = "624129803500-p9iq7i2mbngcr5ut675cg4n23mbhsajo.apps.googleusercontent.com"; // <-- your client ID
-
+// ===== Google / Sheets configuration =====
+const CLIENT_ID = "624129803500-p9iq7i2mbngcr5ut675cg4n23mbhsajo.apps.googleusercontent.com"; // your OAuth client ID
 const SCOPES = "https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file";
 const DISCOVERY_DOC = "https://sheets.googleapis.com/$discovery/rest?version=v4";
 
@@ -9,19 +8,16 @@ const SHEET_RANGE = `${SHEET_TITLE}!A:D`; // Date, Name, Amount, Category
 
 const LS_KEY_SHEET_ID = "userSheetId";
 const LS_KEY_SHEET_GID = "userSheetGid";
-const LS_KEY_AUTH_SESSION = "authSessionExpiresAt";
-const AUTH_SESSION_DAYS = 14;
-const AUTH_SESSION_MS = AUTH_SESSION_DAYS * 24 * 60 * 60 * 1000;
 
 let purchases = JSON.parse(localStorage.getItem("purchases")) || [];
 let burnupChart;
 let tokenClient;
 let gapiReady = false;
-let isExplicitLogin = false;
 
 let SPREADSHEET_ID = localStorage.getItem(LS_KEY_SHEET_ID) || null;
 let SHEET_GID = localStorage.getItem(LS_KEY_SHEET_GID) || null;
 
+// ===== UI helpers =====
 const statusEl = () => document.getElementById("syncStatus");
 function setSyncStatus(msg, cls = "") {
   const el = statusEl();
@@ -35,16 +31,6 @@ function showSheetHelper(show) {
 }
 function saveLocal() {
   localStorage.setItem("purchases", JSON.stringify(purchases));
-}
-function isAuthSessionValid() {
-  const raw = localStorage.getItem(LS_KEY_AUTH_SESSION);
-  if (!raw) return false;
-  const expiresAt = Number(raw);
-  return Number.isFinite(expiresAt) && Date.now() < expiresAt;
-}
-function startAuthSessionWindow() {
-  const expiresAt = Date.now() + AUTH_SESSION_MS;
-  localStorage.setItem(LS_KEY_AUTH_SESSION, String(expiresAt));
 }
 function toggleMenu(){
   const m = document.getElementById('sideMenu');
@@ -60,6 +46,7 @@ function goPage(name){
   }
 }
 
+// ===== Rendering purchases & totals =====
 function renderPurchases() {
   const list = document.getElementById("purchaseList");
   const totalDisplay = document.getElementById("totalSpent");
@@ -109,6 +96,7 @@ function updateBurnupChart() {
   });
 }
 
+// ===== Category summary & auto-categorization =====
 function computeCategoryTotals() {
   const totals = {};
   let grandTotal = 0;
@@ -142,6 +130,29 @@ function renderCategorySummary() {
   });
 }
 
+// Very simple keyword-based category guesser (optional)
+function suggestCategory(name) {
+  const n = (name || "").toLowerCase();
+  const rules = [
+    { cat: "Groceries", keywords: ["grocery", "market", "walmart", "costco", "smiths", "kroger", "aldi"], },
+    { cat: "Dining Out", keywords: ["restaurant", "grill", "cafe", "bar", "mcDonald's", "taco", "pizza", "chipotle"], },
+    { cat: "Housing", keywords: ["rent", "mortgage", "landlord"], },
+    { cat: "Utilities", keywords: ["power", "electric", "gas bill", "water bill", "internet", "comcast", "xfinity"], },
+    { cat: "Transportation", keywords: ["uber", "lyft", "gas", "fuel", "diesel", "bus", "train"], },
+    { cat: "Entertainment", keywords: ["movie", "cinema", "netflix", "hulu", "spotify", "concert", "game"], },
+    { cat: "Health", keywords: ["pharmacy", "walgreens", "cvs", "doctor", "clinic", "copay", "gym"], },
+    { cat: "Debt", keywords: ["loan", "credit card", "payment", "collections"], },
+    { cat: "Savings", keywords: ["savings", "investment", "brokerage", "roth", "401k"], },
+  ];
+  for (const rule of rules) {
+    if (rule.keywords.some(k => n.includes(k.toLowerCase()))) {
+      return rule.cat;
+    }
+  }
+  return "Other";
+}
+
+// ===== Add / delete purchases =====
 async function addPurchase() {
   const nameInput = document.getElementById("itemName");
   const amountInput = document.getElementById("itemAmount");
@@ -151,7 +162,7 @@ async function addPurchase() {
   const name = nameInput.value.trim();
   const amountStr = amountInput.value;
   const date = dateInput.value;
-  const category = (categorySelect && categorySelect.value) || "Uncategorized";
+  let category = (categorySelect && categorySelect.value) || "";
 
   if (!name || !amountStr || !date) {
     alert("Please fill out all fields");
@@ -162,6 +173,11 @@ async function addPurchase() {
   if (!Number.isFinite(amount) || amount <= 0) {
     alert("Please enter a valid amount");
     return;
+  }
+
+  // Auto-detect category if user left it blank
+  if (!category) {
+    category = suggestCategory(name);
   }
 
   const purchase = { name, amount, date, category };
@@ -217,6 +233,7 @@ function clearPurchases() {
   setSyncStatus("Cleared local data only", "ok");
 }
 
+// ===== Google API init (no 14-day session window) =====
 function initGapi() {
   return new Promise((resolve, reject) => {
     if (!window.gapi) {
@@ -249,18 +266,16 @@ function initGIS() {
     callback: async (resp) => {
       if (resp.error) {
         console.warn("GIS token error", resp.error);
-        isExplicitLogin = false;
         return;
       }
       gapi.client.setToken({ access_token: resp.access_token });
-      if (isExplicitLogin) {
-        startAuthSessionWindow();
-        isExplicitLogin = false;
-      }
+
       const btn = document.getElementById("googleSignInBtn");
-      if (btn && isAuthSessionValid()) btn.style.display = "none";
+      if (btn) btn.style.display = "none";
+
       try {
         await ensureSheetInitialized();
+        await reconcileLocalWithSheet();
       } catch (e) {
         console.warn("ensureSheetInitialized failed", e);
         setSyncStatus("Could not set up your Google Sheet", "err");
@@ -271,7 +286,7 @@ function initGIS() {
 }
 
 async function googleSignIn() {
-  // If gapi isn't ready, try to init it *on demand*
+  // If gapi isn't ready, try to init it on demand
   if (!gapiReady) {
     try {
       await initGapi();
@@ -290,27 +305,13 @@ async function googleSignIn() {
     return;
   }
 
-  isExplicitLogin = true;
+  // Explicit sign-in; show consent each time
   tokenClient.requestAccessToken({ prompt: "consent" });
 }
 
-async function ensureSignedIn() {
-  if (!isAuthSessionValid()) return;
-  const token = gapi.client.getToken();
-  if (token?.access_token) return;
-
-  if (!tokenClient) {
-    initGIS();
-  }
-  if (!tokenClient) return;
-
-  tokenClient.requestAccessToken({ prompt: "" });
-  await new Promise((r) => setTimeout(r, 700));
-}
-
+// Manual sheet creation button
 async function manualCreateSheet(){
   try{
-    await ensureSignedIn();
     await ensureSheetInitialized(true);
     showSheetHelper(false);
     setSyncStatus("Sheet ready ✓", "ok");
@@ -320,28 +321,26 @@ async function manualCreateSheet(){
   }
 }
 
+// ===== Sheet helpers =====
 async function ensureSheetInitialized(forceCreate=false){
-  await ensureSignedIn();
-  if (SPREADSHEET_ID && !forceCreate) {
-    if (!SHEET_GID) {
-      SHEET_GID = await fetchSheetGid();
-      localStorage.setItem(LS_KEY_SHEET_GID, SHEET_GID);
-    }
-    return SPREADSHEET_ID;
+  if (!SPREADSHEET_ID || forceCreate) {
+    setSyncStatus("Creating your Google Sheet…");
+    const { id, gid } = await createSpreadsheet();
+    SPREADSHEET_ID = id;
+    SHEET_GID = gid;
+    localStorage.setItem(LS_KEY_SHEET_ID, SPREADSHEET_ID);
+    localStorage.setItem(LS_KEY_SHEET_GID, SHEET_GID);
+    await gapi.client.sheets.spreadsheets.values.update({
+      spreadsheetId: SPREADSHEET_ID,
+      range: `${SHEET_TITLE}!A1:D1`,
+      valueInputOption: "RAW",
+      resource: { values: [["Date","Name","Amount","Category"]] }
+    });
+    setSyncStatus("Sheet created ✓", "ok");
+  } else if (!SHEET_GID) {
+    SHEET_GID = await fetchSheetGid();
+    localStorage.setItem(LS_KEY_SHEET_GID, SHEET_GID);
   }
-  setSyncStatus("Creating your Google Sheet…");
-  const { id, gid } = await createSpreadsheet();
-  SPREADSHEET_ID = id;
-  SHEET_GID = gid;
-  localStorage.setItem(LS_KEY_SHEET_ID, SPREADSHEET_ID);
-  localStorage.setItem(LS_KEY_SHEET_GID, SHEET_GID);
-  await gapi.client.sheets.spreadsheets.values.update({
-    spreadsheetId: SPREADSHEET_ID,
-    range: `${SHEET_TITLE}!A1:D1`,
-    valueInputOption: "RAW",
-    resource: { values: [["Date","Name","Amount","Category"]] }
-  });
-  setSyncStatus("Sheet created ✓", "ok");
   return SPREADSHEET_ID;
 }
 
@@ -404,7 +403,7 @@ async function deleteRowOnSheet(rowNumber1Based) {
 }
 
 async function reconcileLocalWithSheet() {
-  await ensureSheetInitialized();
+  if (!SPREADSHEET_ID) return;
   const resp = await gapi.client.sheets.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
     range: "Sheet1!A2:D",
@@ -444,6 +443,7 @@ function normalizeAmount(a){
   return Number.isFinite(num) ? num.toFixed(2) : "0.00";
 }
 
+// ===== Sign out =====
 async function signOutAndClear(){
   try {
     const token = gapi.client.getToken();
@@ -455,7 +455,6 @@ async function signOutAndClear(){
   localStorage.removeItem("purchases");
   localStorage.removeItem(LS_KEY_SHEET_ID);
   localStorage.removeItem(LS_KEY_SHEET_GID);
-  localStorage.removeItem(LS_KEY_AUTH_SESSION);
   purchases = [];
   SPREADSHEET_ID = null;
   SHEET_GID = null;
@@ -465,49 +464,18 @@ async function signOutAndClear(){
   setSyncStatus("Signed out & cleared this device", "ok");
 }
 
+// ===== Boot =====
 window.addEventListener("load", async () => {
   try {
-    // Best-effort init; if it fails, googleSignIn() will retry
     try {
       await initGapi();
     } catch (e) {
       console.warn("Initial gapi init failed; will retry on sign-in.", e);
     }
     initGIS();
-    if (isAuthSessionValid()) {
-      try {
-        await ensureSignedIn();
-        const btn = document.getElementById("googleSignInBtn");
-        if (btn) btn.style.display = "none";
-        await ensureSheetInitialized();
-        await reconcileLocalWithSheet();
-      } catch (_) {}
-    } else {
-      const btn = document.getElementById("googleSignInBtn");
-      if (btn) btn.style.display = "";
-    }
   } catch (e) {
     console.error("Init error", e);
     setSyncStatus("Init failed", "err");
   }
   renderPurchases();
-});
-
-document.addEventListener("visibilitychange", async () => {
-  if (document.visibilityState !== "visible") return;
-  if (!isAuthSessionValid()) return;
-  try {
-    await ensureSignedIn();
-    const btn = document.getElementById("googleSignInBtn");
-    if (btn) btn.style.display = "none";
-  } catch (_) {}
-});
-
-window.addEventListener("focus", async () => {
-  if (!isAuthSessionValid()) return;
-  try {
-    await ensureSignedIn();
-    const btn = document.getElementById("googleSignInBtn");
-    if (btn) btn.style.display = "none";
-  } catch (_) {}
 });
