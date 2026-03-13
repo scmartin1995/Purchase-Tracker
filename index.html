@@ -82,7 +82,7 @@
       </div>
       <div class="category-row">
         <select id="itemCategory">
-          <option value="">Category (optional)</option>
+          <option value="">Category (auto-detect if blank)</option>
           <option value="Housing">Housing</option>
           <option value="Utilities">Utilities</option>
           <option value="Groceries">Groceries</option>
@@ -106,9 +106,8 @@
         </button>
       </div>
 
-      <!-- If sheet creation ever fails, this appears -->
       <div id="sheetHelper" class="status" style="display:none;">
-        Couldn’t create your Google Sheet automatically.
+        Couldn't create your Google Sheet automatically.
         <button class="btn primary" onclick="manualCreateSheet()">Create My Sheet</button>
       </div>
 
@@ -116,7 +115,12 @@
     </section>
 
     <section class="card">
-      <h3>Spending burn-up</h3>
+      <div class="chart-header">
+        <h3>Spending burn-up</h3>
+        <select id="chartMonthFilter" class="month-filter">
+          <option value="">All time</option>
+        </select>
+      </div>
       <canvas id="burnupChart"></canvas>
     </section>
   </main>
@@ -143,8 +147,7 @@
               <th>% of spend</th>
             </tr>
           </thead>
-          <tbody>
-          </tbody>
+          <tbody></tbody>
         </table>
       </div>
     </section>

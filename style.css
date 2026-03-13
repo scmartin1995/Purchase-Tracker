@@ -55,11 +55,26 @@ input, select{width:100%; padding:12px; border:1px solid var(--md-outline); bord
 
 /* Purchases list */
 .purchase-list{border-top:1px solid var(--md-outline)}
-.purchase-item{display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid var(--md-outline)}
-.purchase-name{flex:2; min-width:140px; word-break:break-word}
+.purchase-item{display:flex; align-items:center; gap:8px; padding:10px 0; border-bottom:1px solid var(--md-outline)}
+.purchase-name{flex:2; min-width:140px; word-break:break-word; display:flex; align-items:center; gap:6px; flex-wrap:wrap}
 .purchase-amount{flex:1; text-align:right; white-space:nowrap; font-variant-numeric:tabular-nums}
-.delete-btn{background:transparent; color:var(--md-error); border:none; padding:6px 8px; border-radius:8px; cursor:pointer}
-.delete-btn:hover{background:rgba(176,0,32,.08)}
+
+/* Small icon buttons (edit / delete in list) */
+.icon-btn-sm{
+  background:transparent; border:none; padding:5px 6px;
+  border-radius:6px; cursor:pointer; display:inline-flex; align-items:center;
+  color:var(--md-subtle); transition:background .15s, color .15s;
+}
+.icon-btn-sm:hover{background:#f0f2f5; color:var(--md-text)}
+.icon-btn-sm.delete-btn:hover{background:rgba(176,0,32,.08); color:var(--md-error)}
+.icon-btn-sm .material-symbols-outlined{font-size:18px}
+
+/* Category tag inline */
+.cat-tag{
+  display:inline-block; font-size:.72rem; padding:2px 7px;
+  background:#e8f0fe; color:#1a55c4; border-radius:999px;
+  white-space:nowrap; font-weight:500;
+}
 
 /* Status + total */
 .status{margin-top:10px; padding:8px 10px; border-radius:var(--radius-sm); font-size:.85rem; background:#f3f4ff; color:var(--md-subtle)}
@@ -102,6 +117,27 @@ input, select{width:100%; padding:12px; border:1px solid var(--md-outline); bord
 .category-table td:nth-child(3){text-align:right; font-variant-numeric:tabular-nums;}
 
 .subtle{color:var(--md-subtle); font-size:.85rem; margin:4px 0 0 0;}
+
+/* Chart header row */
+.chart-header{display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;}
+.chart-header h3{margin:0;}
+.month-filter{
+  width:auto; padding:6px 10px; font-size:.85rem;
+  border:1px solid var(--md-outline); border-radius:var(--radius-sm);
+  background:#fff; cursor:pointer;
+}
+
+/* Edit modal */
+.modal-overlay{
+  position:fixed; inset:0; background:rgba(0,0,0,.4);
+  display:flex; align-items:center; justify-content:center;
+  z-index:300; padding:16px;
+}
+.modal-card{
+  background:var(--md-surface); border-radius:var(--radius-md);
+  box-shadow:var(--shadow-2); padding:20px; width:100%; max-width:480px;
+}
+.modal-card h3{margin:0 0 14px 0;}
 
 /* Layout width on larger screens */
 @media (min-width: 680px){ .card{max-width:820px; margin-inline:auto} }
