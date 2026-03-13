@@ -7,32 +7,36 @@ const DISCOVERY_DOC = "https://sheets.googleapis.com/$discovery/rest?version=v4"
 const SHEET_TITLE = "Sheet1";
 const SHEET_RANGE = `${SHEET_TITLE}!A:E`; // Date, Name, Amount, Category, UUID
 
-const LS_KEY_SHEET_ID   = "userSheetId";
-const LS_KEY_SHEET_GID  = "userSheetGid";
-const LS_KEY_TOKEN      = "gAccessToken";
-const LS_KEY_TOKEN_EXP  = "gAccessTokenExp";
+const LS_KEY_SHEET_ID  = "userSheetId";
+const LS_KEY_SHEET_GID = "userSheetGid";
+const LS_KEY_TOKEN     = "gAccessToken";
+const LS_KEY_TOKEN_EXP = "gAccessTokenExp";
 
 let purchases   = JSON.parse(localStorage.getItem("purchases")) || [];
-let burnupChart = null;
 let tokenClient = null;
 let gapiReady   = false;
-
-// Track the chart filter month ("" = all time)
-let chartMonth = "";
+let chartMonth  = "";
 
 let SPREADSHEET_ID = localStorage.getItem(LS_KEY_SHEET_ID)  || null;
 let SHEET_GID      = localStorage.getItem(LS_KEY_SHEET_GID) || null;
 
-// ===== UUID helper =====
+// ===== Helpers =====
 function genId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
 
-// ===== XSS-safe text insertion =====
 function esc(str) {
   const d = document.createElement("div");
   d.textContent = str ?? "";
   return d.innerHTML;
+}
+
+function todayStr() {
+  return new Date().toLocaleDateString("en-CA");
+}
+
+function saveLocal() {
+  localStorage.setItem("purchases", JSON.stringify(purchases));
 }
 
 // ===== UI helpers =====
@@ -41,17 +45,13 @@ const statusEl = () => document.getElementById("syncStatus");
 function setSyncStatus(msg, cls = "") {
   const el = statusEl();
   if (!el) return;
-  el.className = "status " + cls;
+  el.className = "status-pill " + cls;
   el.textContent = msg;
 }
 
 function showSheetHelper(show) {
   const el = document.getElementById("sheetHelper");
   if (el) el.style.display = show ? "block" : "none";
-}
-
-function saveLocal() {
-  localStorage.setItem("purchases", JSON.stringify(purchases));
 }
 
 function toggleMenu() {
@@ -67,9 +67,41 @@ function goPage(name) {
   if (name === "categories") renderCategorySummary();
 }
 
+// ===== Category pill class =====
+function pillClass(category) {
+  const map = {
+    "Housing":       "pill-housing",
+    "Utilities":     "pill-utilities",
+    "Groceries":     "pill-groceries",
+    "Dining Out":    "pill-dining",
+    "Transportation":"pill-transportation",
+    "Entertainment": "pill-entertainment",
+    "Health":        "pill-health",
+    "Debt":          "pill-debt",
+    "Savings":       "pill-savings",
+    "Other":         "pill-other",
+  };
+  return map[category] || "pill-uncategorized";
+}
+
+function barColor(category) {
+  const map = {
+    "Housing":       "var(--bar-housing)",
+    "Utilities":     "var(--bar-utilities)",
+    "Groceries":     "var(--bar-groceries)",
+    "Dining Out":    "var(--bar-dining)",
+    "Transportation":"var(--bar-transport)",
+    "Entertainment": "var(--bar-entertainment)",
+    "Health":        "var(--bar-health)",
+    "Debt":          "var(--bar-debt)",
+    "Savings":       "var(--bar-savings)",
+    "Other":         "var(--bar-other)",
+  };
+  return map[category] || "var(--bar-other)";
+}
+
 // ===== Token persistence =====
 function saveToken(tokenResp) {
-  // expires_in is in seconds; back off 60s for safety
   const expiry = Date.now() + (tokenResp.expires_in - 60) * 1000;
   localStorage.setItem(LS_KEY_TOKEN,     tokenResp.access_token);
   localStorage.setItem(LS_KEY_TOKEN_EXP, expiry.toString());
@@ -99,14 +131,44 @@ function isSignedIn() {
 function updateSignInButton() {
   const btn = document.getElementById("googleSignInBtn");
   if (!btn) return;
-  if (isSignedIn()) {
-    btn.style.display = "none";
+  btn.style.display = isSignedIn() ? "none" : "";
+}
+
+// ===== Hero block =====
+function updateHero() {
+  const labelEl  = document.getElementById("heroMonthLabel");
+  const amountEl = document.getElementById("heroTotal");
+  const subEl    = document.getElementById("heroSub");
+  if (!labelEl || !amountEl) return;
+
+  const now   = new Date();
+  const thisM = now.toLocaleDateString("en-CA").slice(0, 7); // YYYY-MM
+  const lastM = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+    .toLocaleDateString("en-CA").slice(0, 7);
+
+  const thisTotal = purchases
+    .filter(p => p.date && p.date.startsWith(thisM))
+    .reduce((s, p) => s + parseFloat(p.amount || 0), 0);
+
+  const lastTotal = purchases
+    .filter(p => p.date && p.date.startsWith(lastM))
+    .reduce((s, p) => s + parseFloat(p.amount || 0), 0);
+
+  const monthName = now.toLocaleString("default", { month: "long", year: "numeric" });
+  labelEl.textContent  = monthName;
+  amountEl.textContent = `$${thisTotal.toFixed(2)}`;
+
+  if (lastTotal > 0) {
+    const diff = thisTotal - lastTotal;
+    const pct  = Math.abs((diff / lastTotal) * 100).toFixed(0);
+    const sign = diff >= 0 ? "+" : "−";
+    subEl.textContent = `${sign}$${Math.abs(diff).toFixed(2)} (${sign}${pct}%) vs last month`;
   } else {
-    btn.style.display = "";
+    subEl.textContent = "\u00a0";
   }
 }
 
-// ===== Rendering purchases & totals =====
+// ===== Rendering =====
 function renderPurchases() {
   const list         = document.getElementById("purchaseList");
   const totalDisplay = document.getElementById("totalSpent");
@@ -120,43 +182,48 @@ function renderPurchases() {
     if (!Number.isFinite(amount)) return;
     total += amount;
 
-    const row          = document.createElement("div");
-    row.className      = "purchase-item";
-    row.dataset.index  = i;
-    const categoryLabel = p.category ? ` <span class="cat-tag">${esc(p.category)}</span>` : "";
+    const row      = document.createElement("div");
+    row.className  = "purchase-item";
+
+    const catPill  = p.category
+      ? `<span class="cat-pill ${pillClass(p.category)}">${esc(p.category)}</span>`
+      : "";
 
     row.innerHTML = `
-      <div class="purchase-name">${esc(p.date)} — ${esc(p.name)}${categoryLabel}</div>
-      <div class="purchase-amount">$${amount.toFixed(2)}</div>
-      <button class="edit-btn icon-btn-sm" title="Edit" data-index="${i}">
+      <div class="p-left">
+        <div class="p-name">${esc(p.name)}</div>
+        <div class="p-meta">
+          <span class="p-date">${esc(p.date)}</span>
+          ${catPill}
+        </div>
+      </div>
+      <div class="p-amount">$${amount.toFixed(2)}</div>
+      <button class="act-btn" title="Edit" data-i="${i}">
         <span class="material-symbols-outlined">edit</span>
       </button>
-      <button class="delete-btn icon-btn-sm" title="Delete" data-index="${i}">
+      <button class="act-btn del" title="Delete" data-i="${i}">
         <span class="material-symbols-outlined">delete</span>
       </button>
     `;
 
-    row.querySelector(".edit-btn").addEventListener("click", () => openEditModal(i));
-    row.querySelector(".delete-btn").addEventListener("click", () => deletePurchase(i));
+    row.querySelector(".act-btn:not(.del)").addEventListener("click", () => openEditModal(i));
+    row.querySelector(".act-btn.del").addEventListener("click", () => deletePurchase(i));
 
     list.appendChild(row);
   });
 
   totalDisplay.textContent = `Total: $${total.toFixed(2)}`;
   saveLocal();
-  updateBurnupChart();
+  updateHero();
+  updateCategoryBars();
 }
 
-// ===== Burn-up chart with month filter =====
+// ===== Category bar chart (replaces burn-up on home) =====
 function buildMonthOptions() {
   const select = document.getElementById("chartMonthFilter");
   if (!select) return;
-
-  const months = new Set();
-  purchases.forEach(p => {
-    if (p.date && p.date.length >= 7) months.add(p.date.slice(0, 7));
-  });
-
+  const months  = new Set();
+  purchases.forEach(p => { if (p.date?.length >= 7) months.add(p.date.slice(0, 7)); });
   const sorted  = [...months].sort().reverse();
   const current = select.value;
   select.innerHTML = `<option value="">All time</option>`;
@@ -165,55 +232,53 @@ function buildMonthOptions() {
     const label   = new Date(y, parseInt(mo) - 1).toLocaleString("default", { month: "long", year: "numeric" });
     select.innerHTML += `<option value="${m}">${label}</option>`;
   });
-
-  // Restore selection if still valid
   if (sorted.includes(current)) select.value = current;
   chartMonth = select.value;
 }
 
-function updateBurnupChart() {
-  const canvas = document.getElementById("burnupChart");
-  if (!canvas) return;
+function updateCategoryBars() {
+  const container = document.getElementById("categoryBars");
+  if (!container) return;
 
   buildMonthOptions();
 
-  const ctx    = canvas.getContext("2d");
   let filtered = [...purchases];
+  if (chartMonth) filtered = filtered.filter(p => p.date?.startsWith(chartMonth));
 
-  if (chartMonth) {
-    filtered = filtered.filter(p => p.date && p.date.startsWith(chartMonth));
+  const totals = {};
+  let grandTotal = 0;
+  filtered.forEach(p => {
+    const amt = parseFloat(p.amount || 0);
+    if (!Number.isFinite(amt) || amt <= 0) return;
+    const cat = p.category || "Other";
+    totals[cat] = (totals[cat] || 0) + amt;
+    grandTotal += amt;
+  });
+
+  container.innerHTML = "";
+  if (grandTotal === 0) {
+    container.innerHTML = `<p class="subtle">No purchases yet.</p>`;
+    return;
   }
 
-  const sorted = filtered.sort((a, b) => new Date(a.date) - new Date(b.date));
-  let labels = [], data = [], sum = 0;
-
-  sorted.forEach(p => {
-    sum += parseFloat(p.amount || 0);
-    labels.push(p.date);
-    data.push(+sum.toFixed(2));
-  });
-
-  if (burnupChart) burnupChart.destroy();
-
-  burnupChart = new Chart(ctx, {
-    type: "line",
-    data: {
-      labels,
-      datasets: [{
-        label: chartMonth ? `Spending — ${chartMonth}` : "Cumulative Spending",
-        data,
-        fill: true,
-        tension: 0.3,
-        backgroundColor: "rgba(26,115,232,0.08)",
-        borderColor: "#1a73e8",
-        pointBackgroundColor: "#1a73e8"
-      }]
-    },
-    options: { responsive: true, plugins: { legend: { display: false } } }
-  });
+  Object.entries(totals)
+    .sort((a, b) => b[1] - a[1])
+    .forEach(([cat, total]) => {
+      const pct = (total / grandTotal) * 100;
+      const row = document.createElement("div");
+      row.className = "cat-bar-row";
+      row.innerHTML = `
+        <div class="cat-bar-name">${esc(cat)}</div>
+        <div class="cat-bar-track">
+          <div class="cat-bar-fill" style="width:${pct.toFixed(1)}%;background:${barColor(cat)};"></div>
+        </div>
+        <div class="cat-bar-val">$${total.toFixed(0)}</div>
+      `;
+      container.appendChild(row);
+    });
 }
 
-// ===== Category summary =====
+// ===== Category summary page =====
 function computeCategoryTotals() {
   const totals = {};
   let grandTotal = 0;
@@ -234,11 +299,11 @@ function renderCategorySummary() {
   if (!tbody) return;
   tbody.innerHTML = "";
   const { totals, grandTotal } = computeCategoryTotals();
-  Object.entries(totals).sort((a, b) => b[1] - a[1]).forEach(([category, total]) => {
+  Object.entries(totals).sort((a, b) => b[1] - a[1]).forEach(([cat, total]) => {
     const tr  = document.createElement("tr");
     const pct = grandTotal ? (total / grandTotal) * 100 : 0;
     tr.innerHTML = `
-      <td>${esc(category)}</td>
+      <td><span class="cat-pill ${pillClass(cat)}">${esc(cat)}</span></td>
       <td>$${total.toFixed(2)}</td>
       <td>${pct.toFixed(1)}%</td>
     `;
@@ -246,19 +311,19 @@ function renderCategorySummary() {
   });
 }
 
-// ===== Keyword category guesser =====
+// ===== Category guesser =====
 function suggestCategory(name) {
   const n     = (name || "").toLowerCase();
   const rules = [
-    { cat: "Groceries",      keywords: ["grocery","market","walmart","costco","smiths","kroger","aldi","whole foods","trader joe"] },
-    { cat: "Dining Out",     keywords: ["restaurant","grill","cafe","bar","mcdonald","taco","pizza","chipotle","sushi","diner"] },
+    { cat: "Groceries",      keywords: ["grocery","market","walmart","costco","smiths","kroger","aldi","whole foods","trader joe","safeway","albertsons"] },
+    { cat: "Dining Out",     keywords: ["restaurant","grill","cafe","bar","mcdonald","taco","pizza","chipotle","sushi","diner","burrito","burger","kitchen"] },
     { cat: "Housing",        keywords: ["rent","mortgage","landlord","hoa","lease"] },
-    { cat: "Utilities",      keywords: ["power","electric","gas bill","water bill","internet","comcast","xfinity","utility"] },
-    { cat: "Transportation", keywords: ["uber","lyft","gas","fuel","diesel","bus","train","parking","toll","transit"] },
-    { cat: "Entertainment",  keywords: ["movie","cinema","netflix","hulu","spotify","concert","game","disney+","ticket"] },
-    { cat: "Health",         keywords: ["pharmacy","walgreens","cvs","doctor","clinic","copay","gym","dental","vision"] },
+    { cat: "Utilities",      keywords: ["power","electric","gas bill","water bill","internet","comcast","xfinity","utility","spectrum","cox"] },
+    { cat: "Transportation", keywords: ["uber","lyft","gas","fuel","diesel","bus","train","parking","toll","transit","shell","chevron","texaco"] },
+    { cat: "Entertainment",  keywords: ["movie","cinema","netflix","hulu","spotify","concert","game","disney+","ticket","amazon prime","youtube"] },
+    { cat: "Health",         keywords: ["pharmacy","walgreens","cvs","doctor","clinic","copay","gym","dental","vision","hospital","rx"] },
     { cat: "Debt",           keywords: ["loan","credit card","payment","collections","interest"] },
-    { cat: "Savings",        keywords: ["savings","investment","brokerage","roth","401k","vanguard","fidelity"] },
+    { cat: "Savings",        keywords: ["savings","investment","brokerage","roth","401k","vanguard","fidelity","schwab"] },
   ];
   for (const rule of rules) {
     if (rule.keywords.some(k => n.includes(k))) return rule.cat;
@@ -268,56 +333,50 @@ function suggestCategory(name) {
 
 // ===== Add purchase =====
 async function addPurchase() {
-  const nameInput     = document.getElementById("itemName");
-  const amountInput   = document.getElementById("itemAmount");
-  const dateInput     = document.getElementById("itemDate");
+  const nameInput      = document.getElementById("itemName");
+  const amountInput    = document.getElementById("itemAmount");
+  const dateInput      = document.getElementById("itemDate");
   const categorySelect = document.getElementById("itemCategory");
 
   const name      = nameInput.value.trim();
   const amountStr = amountInput.value;
   const date      = dateInput.value;
-  let category    = (categorySelect && categorySelect.value) || "";
+  let category    = (categorySelect?.value) || "";
 
-  if (!name || !amountStr || !date) { alert("Please fill out all fields"); return; }
+  if (!name || !amountStr || !date) { alert("Please fill out all fields."); return; }
 
   const amount = parseFloat(amountStr);
-  if (!Number.isFinite(amount) || amount <= 0) { alert("Please enter a valid amount"); return; }
+  if (!Number.isFinite(amount) || amount <= 0) { alert("Please enter a valid amount."); return; }
 
-  const wasAutoCategory = !category;
+  const wasAuto = !category;
   if (!category) category = suggestCategory(name);
 
   const purchase = { id: genId(), name, amount, date, category };
 
-  // Clear inputs
   nameInput.value   = "";
   amountInput.value = "";
   dateInput.value   = todayStr();
   if (categorySelect) categorySelect.value = "";
 
-  // Optimistically add
   purchases.push(purchase);
   renderPurchases();
 
-  if (wasAutoCategory) {
-    setSyncStatus(`Category auto-set to "${category}"`, "ok");
-  }
+  if (wasAuto) setSyncStatus(`Auto-categorized as "${category}"`, "ok");
 
-  // Sync to sheet
   if (isSignedIn()) {
     try {
       const rowNum  = await appendRowToSheet(purchase);
       purchase.row  = rowNum;
       saveLocal();
-      setSyncStatus(`Added & synced ✓${wasAutoCategory ? ` — category: ${category}` : ""}`, "ok");
+      setSyncStatus(`Saved & synced ✓${wasAuto ? ` — ${category}` : ""}`, "ok");
     } catch (e) {
       console.warn("Sync failed", e);
-      // Rollback
       purchases = purchases.filter(p => p.id !== purchase.id);
       renderPurchases();
-      setSyncStatus("Sync failed — purchase not saved ✗", "err");
+      setSyncStatus("Sync failed — entry not saved ✗", "err");
     }
   } else {
-    setSyncStatus("Saved locally (sign in to sync) " + (wasAutoCategory ? `— category: ${category}` : ""), "ok");
+    setSyncStatus(`Saved locally${wasAuto ? ` — auto: ${category}` : ""}`, "ok");
   }
 }
 
@@ -325,59 +384,55 @@ async function addPurchase() {
 function openEditModal(index) {
   const p = purchases[index];
   if (!p) return;
-
-  // Remove any existing modal
   document.getElementById("editModal")?.remove();
 
-  const modal       = document.createElement("div");
-  modal.id          = "editModal";
-  modal.className   = "modal-overlay";
-  modal.innerHTML   = `
-    <div class="modal-card">
-      <h3>Edit purchase</h3>
-      <div class="input-grid">
-        <input id="editName"   type="text"   value="${esc(p.name)}"   placeholder="Item name" />
-        <input id="editAmount" type="number" step="0.01" value="${esc(String(p.amount))}" placeholder="Amount" />
-        <input id="editDate"   type="date"   value="${esc(p.date)}" />
+  const overlay   = document.createElement("div");
+  overlay.id      = "editModal";
+  overlay.className = "modal-bg";
+
+  const cats = ["Housing","Utilities","Groceries","Dining Out","Transportation","Entertainment","Health","Debt","Savings","Other"];
+  const options = cats.map(c => `<option value="${c}"${c === p.category ? " selected" : ""}>${c}</option>`).join("");
+
+  overlay.innerHTML = `
+    <div class="modal-box">
+      <div class="card-label">Edit entry</div>
+      <div class="input-grid" style="margin-bottom:8px;">
+        <input id="e-name"   type="text"   value="${esc(p.name)}"          placeholder="Item name" />
+        <input id="e-amount" type="number" value="${esc(String(p.amount))}" step="0.01" placeholder="$0.00" class="mono" />
+        <input id="e-date"   type="date"   value="${esc(p.date)}"           class="mono" />
       </div>
-      <div class="category-row" style="margin-top:10px;">
-        <select id="editCategory">
-          <option value="">Select category</option>
-          ${["Housing","Utilities","Groceries","Dining Out","Transportation","Entertainment","Health","Debt","Savings","Other"]
-            .map(c => `<option value="${c}"${c === p.category ? " selected" : ""}>${c}</option>`)
-            .join("")}
-        </select>
+      <div class="cat-row">
+        <select id="e-cat">${options}</select>
       </div>
-      <div class="actions" style="margin-top:14px;">
-        <button class="btn primary" id="editSaveBtn">Save</button>
-        <button class="btn" id="editCancelBtn">Cancel</button>
+      <div class="btn-row" style="margin-top:14px;">
+        <button class="btn-primary" id="e-save">Save</button>
+        <button class="btn-ghost"   id="e-cancel">Cancel</button>
       </div>
     </div>
   `;
 
-  document.body.appendChild(modal);
+  document.body.appendChild(overlay);
 
-  modal.querySelector("#editCancelBtn").addEventListener("click", () => modal.remove());
-  modal.addEventListener("click", e => { if (e.target === modal) modal.remove(); });
+  overlay.querySelector("#e-cancel").addEventListener("click", () => overlay.remove());
+  overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
 
-  modal.querySelector("#editSaveBtn").addEventListener("click", async () => {
-    const newName     = modal.querySelector("#editName").value.trim();
-    const newAmountStr = modal.querySelector("#editAmount").value;
-    const newDate     = modal.querySelector("#editDate").value;
-    const newCategory = modal.querySelector("#editCategory").value;
+  overlay.querySelector("#e-save").addEventListener("click", async () => {
+    const newName   = overlay.querySelector("#e-name").value.trim();
+    const newAmt    = parseFloat(overlay.querySelector("#e-amount").value);
+    const newDate   = overlay.querySelector("#e-date").value;
+    const newCat    = overlay.querySelector("#e-cat").value;
 
-    if (!newName || !newAmountStr || !newDate) { alert("Please fill out all fields"); return; }
-    const newAmount = parseFloat(newAmountStr);
-    if (!Number.isFinite(newAmount) || newAmount <= 0) { alert("Please enter a valid amount"); return; }
+    if (!newName || !newDate) { alert("Please fill out all fields."); return; }
+    if (!Number.isFinite(newAmt) || newAmt <= 0) { alert("Please enter a valid amount."); return; }
 
-    const oldRow      = p.row;
-    p.name            = newName;
-    p.amount          = newAmount;
-    p.date            = newDate;
-    p.category        = newCategory || suggestCategory(newName);
+    const oldRow = p.row;
+    p.name     = newName;
+    p.amount   = newAmt;
+    p.date     = newDate;
+    p.category = newCat || suggestCategory(newName);
     renderPurchases();
     saveLocal();
-    modal.remove();
+    overlay.remove();
 
     if (isSignedIn() && oldRow) {
       try {
@@ -385,7 +440,7 @@ function openEditModal(index) {
         setSyncStatus("Edit synced ✓", "ok");
       } catch (e) {
         console.warn("Edit sync failed", e);
-        setSyncStatus("Edit saved locally, sheet sync failed ✗", "err");
+        setSyncStatus("Edit saved locally — sheet sync failed ✗", "err");
       }
     } else {
       setSyncStatus("Edit saved locally", "ok");
@@ -393,16 +448,13 @@ function openEditModal(index) {
   });
 }
 
-// ===== Delete purchase =====
+// ===== Delete =====
 async function deletePurchase(index) {
   const purchase = purchases[index];
   purchases.splice(index, 1);
   renderPurchases();
 
-  if (!isSignedIn()) {
-    setSyncStatus("Deleted locally", "ok");
-    return;
-  }
+  if (!isSignedIn()) { setSyncStatus("Deleted locally", "ok"); return; }
 
   try {
     await ensureSheetInitialized();
@@ -413,7 +465,7 @@ async function deletePurchase(index) {
       saveLocal();
       setSyncStatus("Deleted from sheet ✓", "ok");
     } else {
-      setSyncStatus("Deleted locally (no sheet row found)", "ok");
+      setSyncStatus("Deleted locally — no sheet row found", "ok");
     }
   } catch (e) {
     console.warn("Delete on sheet failed", e);
@@ -429,11 +481,6 @@ function clearPurchases() {
   setSyncStatus("Cleared local data only", "ok");
 }
 
-// ===== Date helper =====
-function todayStr() {
-  return new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD in local time
-}
-
 // ===== Google API init =====
 function initGapi() {
   return new Promise((resolve, reject) => {
@@ -443,37 +490,28 @@ function initGapi() {
         await gapi.client.init({ discoveryDocs: [DISCOVERY_DOC] });
         gapiReady = true;
         resolve();
-      } catch (e) {
-        reject(e);
-      }
+      } catch (e) { reject(e); }
     });
   });
 }
 
 function initGIS() {
   if (!window.google || !google.accounts?.oauth2) return;
-
   tokenClient = google.accounts.oauth2.initTokenClient({
     client_id: CLIENT_ID,
     scope: SCOPES,
-    // Empty string = use cached token silently when possible; no re-consent
     prompt: "",
     callback: async (resp) => {
-      if (resp.error) {
-        console.warn("GIS token error", resp.error);
-        setSyncStatus("Sign-in failed", "err");
-        return;
-      }
+      if (resp.error) { console.warn("GIS token error", resp.error); setSyncStatus("Sign-in failed", "err"); return; }
       saveToken(resp);
       updateSignInButton();
-
       try {
         await ensureSheetInitialized();
         await reconcileLocalWithSheet();
         setSyncStatus("Signed in & synced ✓", "ok");
       } catch (e) {
-        console.warn("Post-sign-in setup failed", e);
-        setSyncStatus("Could not set up your Google Sheet", "err");
+        console.warn("Post sign-in setup failed", e);
+        setSyncStatus("Could not set up Google Sheet", "err");
         showSheetHelper(true);
       }
     },
@@ -485,11 +523,8 @@ async function googleSignIn() {
     try { await initGapi(); }
     catch (e) { alert("Google libraries failed to load. Check your network."); return; }
   }
-
   if (!tokenClient) initGIS();
   if (!tokenClient) { alert("Google sign-in is still starting up."); return; }
-
-  // Only force re-consent on very first sign-in (no saved sheet ID yet)
   const promptMode = SPREADSHEET_ID ? "" : "consent";
   tokenClient.requestAccessToken({ prompt: promptMode });
 }
@@ -517,7 +552,7 @@ async function ensureSheetInitialized(forceCreate = false) {
       spreadsheetId: SPREADSHEET_ID,
       range: `${SHEET_TITLE}!A1:E1`,
       valueInputOption: "RAW",
-      resource: { values: [["Date", "Name", "Amount", "Category", "ID"]] }
+      resource: { values: [["Date","Name","Amount","Category","ID"]] }
     });
     setSyncStatus("Sheet created ✓", "ok");
   } else if (!SHEET_GID) {
@@ -533,10 +568,7 @@ async function createSpreadsheet() {
     properties: { title },
     sheets: [{ properties: { title: SHEET_TITLE } }]
   });
-  return {
-    id:  res.result.spreadsheetId,
-    gid: res.result.sheets[0].properties.sheetId
-  };
+  return { id: res.result.spreadsheetId, gid: res.result.sheets[0].properties.sheetId };
 }
 
 async function fetchSheetGid() {
@@ -556,8 +588,8 @@ async function appendRowToSheet(p) {
     insertDataOption: "INSERT_ROWS",
     resource: { values: [[p.date, p.name, p.amount, p.category || "", p.id || ""]] },
   });
-  const upd    = resp.result?.updates;
-  let rowNum   = null;
+  const upd  = resp.result?.updates;
+  let rowNum = null;
   if (upd?.updatedRange) {
     const m = upd.updatedRange.match(/!A(\d+):/i);
     if (m) rowNum = parseInt(m[1], 10);
@@ -595,7 +627,6 @@ async function deleteRowOnSheet(rowNumber1Based) {
   });
 }
 
-// UUID-first reconciliation — falls back to date+name+amount for legacy rows
 async function reconcileLocalWithSheet() {
   if (!SPREADSHEET_ID) return;
   const resp = await gapi.client.sheets.spreadsheets.values.get({
@@ -604,32 +635,25 @@ async function reconcileLocalWithSheet() {
   });
   const values    = resp.result.values || [];
   const sheetRows = values.map((r, idx) => ({
-    date:      (r[0] || "").trim(),
-    name:      (r[1] || "").trim(),
-    amount:    normalizeAmount(r[2]),
-    category:  (r[3] || "").trim(),
-    uuid:      (r[4] || "").trim(),
+    date:     (r[0] || "").trim(),
+    name:     (r[1] || "").trim(),
+    amount:   normalizeAmount(r[2]),
+    category: (r[3] || "").trim(),
+    uuid:     (r[4] || "").trim(),
     rowNumber: idx + 2,
-    matched:   false,
+    matched:  false,
   }));
 
   purchases.forEach(p => {
     if (p.row) return;
-    // Try UUID match first
     let found = p.id ? sheetRows.find(s => !s.matched && s.uuid === p.id) : null;
-    // Fall back to legacy date+name+amount match
     if (!found) {
-      const t = {
-        date:   (p.date   || "").trim(),
-        name:   (p.name   || "").trim(),
-        amount: normalizeAmount(p.amount),
-      };
+      const t = { date: (p.date||"").trim(), name: (p.name||"").trim(), amount: normalizeAmount(p.amount) };
       found = sheetRows.find(s => !s.matched && s.date === t.date && s.name === t.name && s.amount === t.amount);
     }
     if (found) {
-      p.row      = found.rowNumber;
+      p.row         = found.rowNumber;
       found.matched = true;
-      // Backfill UUID if sheet row didn't have one
       if (!found.uuid && p.id && p.row) {
         gapi.client.sheets.spreadsheets.values.update({
           spreadsheetId: SPREADSHEET_ID,
@@ -672,16 +696,14 @@ async function signOutAndClear() {
 
 // ===== Boot =====
 window.addEventListener("load", async () => {
-  // Default the date input to today
   const dateInput = document.getElementById("itemDate");
   if (dateInput) dateInput.value = todayStr();
 
-  // Month filter change handler
   const monthFilter = document.getElementById("chartMonthFilter");
   if (monthFilter) {
     monthFilter.addEventListener("change", () => {
       chartMonth = monthFilter.value;
-      updateBurnupChart();
+      updateCategoryBars();
     });
   }
 
@@ -694,7 +716,6 @@ window.addEventListener("load", async () => {
     setSyncStatus("Init failed", "err");
   }
 
-  // Restore saved token and auto-sync if still valid
   if (gapiReady && loadSavedToken()) {
     updateSignInButton();
     setSyncStatus("Restoring session…");
@@ -704,7 +725,7 @@ window.addEventListener("load", async () => {
       setSyncStatus("Synced ✓", "ok");
     } catch (e) {
       console.warn("Auto-sync failed", e);
-      setSyncStatus("Session restored; sync later", "");
+      setSyncStatus("Session restored — sync later", "");
     }
   } else {
     updateSignInButton();

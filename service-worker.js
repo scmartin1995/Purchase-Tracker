@@ -1,5 +1,5 @@
-// Bump this version string any time you deploy changes — forces clients to pick up new files.
-const CACHE_NAME = "purchase-tracker-v2";
+// Bump version on every deploy to force cache refresh.
+const CACHE_NAME = "purchases-v3";
 const ASSETS = [
   "./",
   "./index.html",
@@ -12,16 +12,15 @@ const ASSETS = [
 ];
 
 self.addEventListener("install", event => {
-  // Force new SW to activate immediately without waiting for old tabs to close
   self.skipWaiting();
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS)));
 });
 
 self.addEventListener("activate", event => {
   event.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.map(k => (k === CACHE_NAME ? null : caches.delete(k))))
-    ).then(() => self.clients.claim())
+    caches.keys()
+      .then(keys => Promise.all(keys.map(k => k === CACHE_NAME ? null : caches.delete(k))))
+      .then(() => self.clients.claim())
   );
 });
 

@@ -3,86 +3,71 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Purchase Tracker</title>
-
-  <!-- PWA -->
+  <title>Purchases</title>
   <link rel="manifest" href="manifest.json" />
-  <meta name="theme-color" content="#1a73e8" />
-
-  <!-- Google Material Symbols (icons) -->
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet" />
-
-  <!-- Styles -->
+  <meta name="theme-color" content="#1a1a18" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Material+Symbols+Outlined" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
-
-  <!-- Chart.js (pinned) -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
-
-  <!-- Google APIs -->
   <script src="https://apis.google.com/js/api.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
-  <!-- Top app bar -->
+
   <header class="appbar">
     <button class="icon-btn" aria-label="Menu" onclick="toggleMenu()">
       <span class="material-symbols-outlined">menu</span>
     </button>
-    <h1>Purchase Tracker</h1>
-    <button id="googleSignInBtn" class="btn text-on-primary" onclick="googleSignIn()">
+    <span class="appbar-logo">Purchases</span>
+    <button id="googleSignInBtn" class="signin-btn" onclick="googleSignIn()">
       <span class="material-symbols-outlined">login</span>
-      <span>Sign in</span>
+      Sign in
     </button>
   </header>
 
-  <!-- Side (hamburger) menu -->
   <nav id="sideMenu" class="side-menu" aria-hidden="true">
     <div class="menu-header">
-      <strong>Menu</strong>
-      <button class="icon-btn" aria-label="Close" onclick="toggleMenu()">
+      <span class="appbar-logo menu-logo">Purchases</span>
+      <button class="icon-btn icon-btn-light" aria-label="Close" onclick="toggleMenu()">
         <span class="material-symbols-outlined">close</span>
       </button>
     </div>
     <ul>
-      <li>
-        <button class="menu-link" onclick="goPage('home'); toggleMenu();">
-          <span class="material-symbols-outlined">home</span>
-          Home
-        </button>
-      </li>
-      <li>
-        <button class="menu-link" onclick="goPage('categories'); toggleMenu();">
-          <span class="material-symbols-outlined">pie_chart</span>
-          Categories
-        </button>
-      </li>
-      <li>
-        <button class="menu-link" onclick="goPage('purchases'); toggleMenu();">
-          <span class="material-symbols-outlined">receipt_long</span>
-          Purchases
-        </button>
-      </li>
-      <li>
-        <button class="menu-link danger" onclick="signOutAndClear();">
-          <span class="material-symbols-outlined">logout</span>
-          Sign out & clear this device
-        </button>
-      </li>
+      <li><button class="menu-link" onclick="goPage('home'); toggleMenu();">
+        <span class="material-symbols-outlined">home</span>Home
+      </button></li>
+      <li><button class="menu-link" onclick="goPage('categories'); toggleMenu();">
+        <span class="material-symbols-outlined">bar_chart</span>Categories
+      </button></li>
+      <li><button class="menu-link" onclick="goPage('purchases'); toggleMenu();">
+        <span class="material-symbols-outlined">receipt_long</span>Purchases
+      </button></li>
+      <li><button class="menu-link menu-danger" onclick="signOutAndClear();">
+        <span class="material-symbols-outlined">logout</span>Sign out &amp; clear
+      </button></li>
     </ul>
   </nav>
 
-  <!-- HOME PAGE -->
+  <!-- HOME -->
   <main id="page-home" class="page active">
+    <div class="hero-block">
+      <div class="hero-label" id="heroMonthLabel">—</div>
+      <div class="hero-amount" id="heroTotal">$0.00</div>
+      <div class="hero-sub" id="heroSub">&nbsp;</div>
+    </div>
+
     <section class="card">
-      <h3>Add purchase</h3>
+      <div class="card-label">New entry</div>
       <div class="input-grid">
-        <input id="itemName" type="text" placeholder="Item name" />
-        <input id="itemAmount" type="number" step="0.01" placeholder="Amount" />
-        <input id="itemDate" type="date" />
+        <input id="itemName"   type="text"   placeholder="Item name" />
+        <input id="itemAmount" type="number" step="0.01" placeholder="$0.00" class="mono" />
+        <input id="itemDate"   type="date"   class="mono" />
       </div>
-      <div class="category-row">
+      <div class="cat-row">
         <select id="itemCategory">
-          <option value="">Category (auto-detect if blank)</option>
+          <option value="">Category — auto-detect if blank</option>
           <option value="Housing">Housing</option>
           <option value="Utilities">Utilities</option>
           <option value="Groceries">Groceries</option>
@@ -95,71 +80,51 @@
           <option value="Other">Other</option>
         </select>
       </div>
-      <div class="actions">
-        <button class="btn primary" onclick="addPurchase()">
-          <span class="material-symbols-outlined">add</span>
-          <span>Add Purchase</span>
-        </button>
-        <button class="btn danger" onclick="clearPurchases()">
-          <span class="material-symbols-outlined">delete_sweep</span>
-          <span>Clear All (device only)</span>
-        </button>
+      <div class="btn-row">
+        <button class="btn-primary" onclick="addPurchase()">Add entry</button>
+        <button class="btn-ghost" onclick="clearPurchases()">Clear device</button>
       </div>
-
-      <div id="sheetHelper" class="status" style="display:none;">
-        Couldn't create your Google Sheet automatically.
-        <button class="btn primary" onclick="manualCreateSheet()">Create My Sheet</button>
+      <div id="sheetHelper" class="status-pill" style="display:none;">
+        Couldn't create Google Sheet.
+        <button class="btn-primary" style="margin-top:8px;display:block;" onclick="manualCreateSheet()">Create Sheet</button>
       </div>
-
-      <div id="syncStatus" class="status">Not synced yet</div>
+      <div id="syncStatus" class="status-pill">Not synced yet</div>
     </section>
 
     <section class="card">
-      <div class="chart-header">
-        <h3>Spending burn-up</h3>
-        <select id="chartMonthFilter" class="month-filter">
+      <div class="chart-top">
+        <div class="card-label" style="margin-bottom:0;">Spending</div>
+        <select id="chartMonthFilter" class="month-select mono">
           <option value="">All time</option>
         </select>
       </div>
-      <canvas id="burnupChart"></canvas>
+      <div id="categoryBars" class="cat-bars"></div>
     </section>
   </main>
 
-  <!-- PURCHASES PAGE -->
+  <!-- PURCHASES -->
   <main id="page-purchases" class="page">
     <section class="card">
-      <h3>Purchases</h3>
+      <div class="card-label">All purchases</div>
       <div id="purchaseList" class="purchase-list"></div>
     </section>
   </main>
 
-  <!-- CATEGORIES PAGE -->
+  <!-- CATEGORIES -->
   <main id="page-categories" class="page">
     <section class="card">
-      <h3>Spending by category</h3>
-      <p class="subtle">Based on all purchases stored on this device.</p>
-      <div class="category-table-wrapper">
-        <table id="categoryTable" class="category-table">
-          <thead>
-            <tr>
-              <th>Category</th>
-              <th>Total</th>
-              <th>% of spend</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
+      <div class="card-label">By category</div>
+      <p class="subtle">All purchases stored on this device.</p>
+      <table id="categoryTable" class="cat-table">
+        <thead><tr><th>Category</th><th>Total</th><th>Share</th></tr></thead>
+        <tbody></tbody>
+      </table>
     </section>
   </main>
 
-  <!-- Footer total -->
-  <footer class="total" id="totalSpent">Total: $0.00</footer>
+  <footer class="total-bar" id="totalSpent">Total: $0.00</footer>
 
-  <!-- App logic -->
   <script src="script.js"></script>
-
-  <!-- Service worker registration -->
   <script>
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("service-worker.js");
