@@ -180,9 +180,29 @@ body { display: flex; flex-direction: column; overflow: hidden; }
 .menu-danger { color: #e08080; }
 .menu-danger:hover { background: rgba(180,60,60,.15); color: #f09090; }
 
-/* ── Pages ── */
-.page { flex: 1; overflow-y: auto; padding: 0; display: none; }
+/* ── Pages ──
+   One <main> is the scroll container between the fixed app bar and total bar;
+   the pages inside it are just shown and hidden. min-height:0 lets it actually
+   shrink inside the flex column instead of overflowing the viewport. */
+main {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.page { display: none; }
 .page.active { display: block; }
+
+/* Visible to screen readers, not on screen — used for input labels whose
+   visual role is already carried by the placeholder. */
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
 
 /* ── Hero block ── */
 .hero-block {

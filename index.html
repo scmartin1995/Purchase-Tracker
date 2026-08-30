@@ -18,12 +18,15 @@
 </head>
 <body>
 
+  <!-- Buttons declare what they do with data-action; script.js wires them up
+       with one delegated listener. No inline onclick, so nothing here has to
+       be a global. -->
   <header class="appbar">
-    <button class="icon-btn" aria-label="Menu" onclick="toggleMenu()">
+    <button class="icon-btn" aria-label="Menu" data-action="toggle-menu">
       <span class="material-symbols-outlined">menu</span>
     </button>
     <span class="appbar-logo">Purchases</span>
-    <button id="googleSignInBtn" class="signin-btn" onclick="googleSignIn()">
+    <button id="googleSignInBtn" class="signin-btn" data-action="sign-in">
       <span class="material-symbols-outlined">login</span>
       Sign in
     </button>
@@ -32,95 +35,101 @@
   <nav id="sideMenu" class="side-menu" aria-hidden="true">
     <div class="menu-header">
       <span class="appbar-logo menu-logo">Purchases</span>
-      <button class="icon-btn icon-btn-light" aria-label="Close" onclick="toggleMenu()">
+      <button class="icon-btn icon-btn-light" aria-label="Close" data-action="toggle-menu">
         <span class="material-symbols-outlined">close</span>
       </button>
     </div>
     <ul>
-      <li><button class="menu-link" onclick="goPage('home'); toggleMenu();">
+      <li><button class="menu-link" data-action="go-page" data-page="home">
         <span class="material-symbols-outlined">home</span>Home
       </button></li>
-      <li><button class="menu-link" onclick="goPage('categories'); toggleMenu();">
+      <li><button class="menu-link" data-action="go-page" data-page="categories">
         <span class="material-symbols-outlined">bar_chart</span>Categories
       </button></li>
-      <li><button class="menu-link" onclick="goPage('purchases'); toggleMenu();">
+      <li><button class="menu-link" data-action="go-page" data-page="purchases">
         <span class="material-symbols-outlined">receipt_long</span>Purchases
       </button></li>
-      <li><button class="menu-link menu-danger" onclick="signOutAndClear();">
+      <li><button class="menu-link menu-danger" data-action="sign-out">
         <span class="material-symbols-outlined">logout</span>Sign out &amp; clear
       </button></li>
     </ul>
   </nav>
 
-  <!-- HOME -->
-  <main id="page-home" class="page active">
-    <div class="hero-block">
-      <div class="hero-label" id="heroMonthLabel">—</div>
-      <div class="hero-amount" id="heroTotal">$0.00</div>
-      <div class="hero-sub" id="heroSub">&nbsp;</div>
-    </div>
-
-    <section class="card">
-      <div class="card-label">New entry</div>
-      <div class="input-grid">
-        <input id="itemName"   type="text"   placeholder="Item name" />
-        <input id="itemAmount" type="number" step="0.01" placeholder="$0.00" class="mono" />
-        <input id="itemDate"   type="date"   class="mono" />
+  <main>
+    <!-- HOME -->
+    <section id="page-home" class="page active" aria-label="Home">
+      <div class="hero-block">
+        <div class="hero-label" id="heroMonthLabel">—</div>
+        <div class="hero-amount" id="heroTotal">$0.00</div>
+        <div class="hero-sub" id="heroSub">&nbsp;</div>
       </div>
-      <div class="cat-row">
-        <!-- Options are filled in from CATEGORIES in script.js at load. -->
-        <select id="itemCategory">
-          <option value="">Category — auto-detect if blank</option>
+
+      <section class="card">
+        <div class="card-label">New entry</div>
+        <div class="input-grid">
+          <label class="sr-only" for="itemName">Item name</label>
+          <input id="itemName"   type="text"   placeholder="Item name" />
+          <label class="sr-only" for="itemAmount">Amount</label>
+          <input id="itemAmount" type="number" step="0.01" placeholder="$0.00" class="mono" />
+          <label class="sr-only" for="itemDate">Date</label>
+          <input id="itemDate"   type="date"   class="mono" />
+        </div>
+        <div class="cat-row">
+          <label class="sr-only" for="itemCategory">Category</label>
+          <!-- Options are filled in from CATEGORIES in script.js at load. -->
+          <select id="itemCategory">
+            <option value="">Category — auto-detect if blank</option>
+          </select>
+        </div>
+        <div class="btn-row">
+          <button class="btn-primary" data-action="add-purchase">Add entry</button>
+          <button class="btn-ghost" data-action="clear-device">Clear device</button>
+        </div>
+        <div id="sheetHelper" class="status-pill" style="display:none;">
+          Couldn't create Google Sheet.
+          <button class="btn-primary" style="margin-top:8px;display:block;" data-action="create-sheet">Create Sheet</button>
+        </div>
+        <div id="syncStatus" class="status-pill" role="status">Not synced yet</div>
+      </section>
+
+      <!-- One filter row, scoping every chart below it. -->
+      <div class="filter-row">
+        <label class="filter-label" for="chartMonthFilter">Showing</label>
+        <select id="chartMonthFilter" class="month-select mono">
+          <option value="">All time</option>
         </select>
       </div>
-      <div class="btn-row">
-        <button class="btn-primary" onclick="addPurchase()">Add entry</button>
-        <button class="btn-ghost" onclick="clearPurchases()">Clear device</button>
-      </div>
-      <div id="sheetHelper" class="status-pill" style="display:none;">
-        Couldn't create Google Sheet.
-        <button class="btn-primary" style="margin-top:8px;display:block;" onclick="manualCreateSheet()">Create Sheet</button>
-      </div>
-      <div id="syncStatus" class="status-pill">Not synced yet</div>
+
+      <section class="card" id="trendCard">
+        <div class="card-label" id="trendLabel">Spending over time</div>
+        <div class="chart-wrap"><canvas id="trendChart"></canvas></div>
+        <p class="chart-note" id="trendNote"></p>
+      </section>
+
+      <section class="card">
+        <div class="card-label">By category</div>
+        <div id="categoryBars" class="cat-bars"></div>
+      </section>
     </section>
 
-    <!-- One filter row, scoping every chart below it. -->
-    <div class="filter-row">
-      <span class="filter-label">Showing</span>
-      <select id="chartMonthFilter" class="month-select mono" aria-label="Time period">
-        <option value="">All time</option>
-      </select>
-    </div>
-
-    <section class="card" id="trendCard">
-      <div class="card-label" id="trendLabel">Spending over time</div>
-      <div class="chart-wrap"><canvas id="trendChart"></canvas></div>
-      <p class="chart-note" id="trendNote"></p>
+    <!-- PURCHASES -->
+    <section id="page-purchases" class="page" aria-label="All purchases">
+      <section class="card">
+        <div class="card-label">All purchases</div>
+        <div id="purchaseList" class="purchase-list"></div>
+      </section>
     </section>
 
-    <section class="card">
-      <div class="card-label">By category</div>
-      <div id="categoryBars" class="cat-bars"></div>
-    </section>
-  </main>
-
-  <!-- PURCHASES -->
-  <main id="page-purchases" class="page">
-    <section class="card">
-      <div class="card-label">All purchases</div>
-      <div id="purchaseList" class="purchase-list"></div>
-    </section>
-  </main>
-
-  <!-- CATEGORIES -->
-  <main id="page-categories" class="page">
-    <section class="card">
-      <div class="card-label">By category</div>
-      <p class="subtle">All purchases stored on this device.</p>
-      <table id="categoryTable" class="cat-table">
-        <thead><tr><th>Category</th><th>Total</th><th>Share</th></tr></thead>
-        <tbody></tbody>
-      </table>
+    <!-- CATEGORIES -->
+    <section id="page-categories" class="page" aria-label="By category">
+      <section class="card">
+        <div class="card-label">By category</div>
+        <p class="subtle">All purchases stored on this device.</p>
+        <table id="categoryTable" class="cat-table">
+          <thead><tr><th>Category</th><th>Total</th><th>Share</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </section>
     </section>
   </main>
 

@@ -98,18 +98,60 @@ function showSheetHelper(show) {
   if (el) el.style.display = show ? "block" : "none";
 }
 
-function toggleMenu() {
-  const m    = document.getElementById("sideMenu");
-  const open = m.classList.toggle("open");
+const PAGES = ["home", "purchases", "categories"];
+
+function setMenuOpen(open) {
+  const m = document.getElementById("sideMenu");
+  if (!m) return;
+  m.classList.toggle("open", open);
   m.setAttribute("aria-hidden", open ? "false" : "true");
 }
 
-function goPage(name) {
-  document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
-  const target = document.getElementById(`page-${name}`);
-  if (target) target.classList.add("active");
-  if (name === "categories") renderCategorySummary();
+function toggleMenu() {
+  const m = document.getElementById("sideMenu");
+  if (m) setMenuOpen(!m.classList.contains("open"));
 }
+
+// Each page becomes a history entry, so the phone's back button goes back a
+// page instead of closing the app. `push: false` is for restoring a page we're
+// already navigating to — on popstate and at boot — where pushing would add a
+// duplicate entry.
+function goPage(name, { push = true } = {}) {
+  if (!PAGES.includes(name)) name = "home";
+
+  document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+  document.getElementById(`page-${name}`)?.classList.add("active");
+  if (name === "categories") renderCategorySummary();
+
+  const main = document.querySelector("main");
+  if (main) main.scrollTop = 0;
+
+  if (push && history.state?.page !== name) {
+    history.pushState({ page: name }, "", `#${name}`);
+  }
+}
+
+window.addEventListener("popstate", e => {
+  setMenuOpen(false);
+  goPage(e.state?.page || location.hash.slice(1) || "home", { push: false });
+});
+
+// One delegated listener for everything the markup declares via data-action.
+// Keeps handlers off inline onclick, which forced every function to be global.
+const ACTIONS = {
+  "toggle-menu":   () => toggleMenu(),
+  "go-page":       el => { goPage(el.dataset.page); setMenuOpen(false); },
+  "sign-in":       () => googleSignIn(),
+  "sign-out":      () => signOutAndClear(),
+  "add-purchase":  () => addPurchase(),
+  "clear-device":  () => clearPurchases(),
+  "create-sheet":  () => manualCreateSheet(),
+};
+
+document.addEventListener("click", e => {
+  const el = e.target.closest("[data-action]");
+  if (el) ACTIONS[el.dataset.action]?.(el);
+});
 
 // ===== Categories =====
 // The single source of truth. Pill colors, bar colors, the auto-detect
@@ -917,6 +959,12 @@ window.addEventListener("load", async () => {
   // "auto-detect if blank" option the markup already provides.
   const catSelect = document.getElementById("itemCategory");
   if (catSelect) catSelect.insertAdjacentHTML("beforeend", categoryOptionsHtml(""));
+
+  // Restore whichever page the URL names, and seed a history entry for it so
+  // the first back press has somewhere to go.
+  const startPage = location.hash.slice(1) || "home";
+  history.replaceState({ page: PAGES.includes(startPage) ? startPage : "home" }, "");
+  goPage(startPage, { push: false });
 
   const monthFilter = document.getElementById("chartMonthFilter");
   if (monthFilter) {
