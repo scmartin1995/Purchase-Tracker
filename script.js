@@ -65,6 +65,9 @@ function loadPurchases() {
   const kept = stored.filter(p => p && isValidAmount(p.amount));
   if (kept.length !== stored.length) {
     console.warn(`Dropped ${stored.length - kept.length} purchase(s) with an invalid amount.`);
+    // Persist the cleanup here. Rendering used to save as a side effect and
+    // happened to do this; now that it doesn't, be explicit about it.
+    localStorage.setItem("purchases", JSON.stringify(kept));
   }
   return kept;
 }
@@ -283,6 +286,13 @@ function updateHero() {
 }
 
 // ===== Rendering =====
+// Rows are addressed by the purchase's own id, not its position in the array.
+// Positions were only ever safe because every mutation re-rendered the whole
+// list; an id stays correct no matter what order things are drawn in.
+function purchaseById(id) {
+  return purchases.find(p => p.id === id);
+}
+
 function renderPurchases() {
   const list         = document.getElementById("purchaseList");
   const totalDisplay = document.getElementById("totalSpent");
@@ -291,13 +301,14 @@ function renderPurchases() {
   list.innerHTML = "";
   let total = 0;
 
-  purchases.forEach((p, i) => {
+  purchases.forEach(p => {
     if (!isValidAmount(p.amount)) return;
     const amount = parseFloat(p.amount);
     total += amount;
 
     const row      = document.createElement("div");
     row.className  = "purchase-item";
+    row.dataset.id = p.id;
 
     const catPill  = p.category
       ? `<span class="cat-pill ${pillClass(p.category)}">${esc(p.category)}</span>`
@@ -312,25 +323,38 @@ function renderPurchases() {
         </div>
       </div>
       <div class="p-amount">$${amount.toFixed(2)}</div>
-      <button class="act-btn" title="Edit" data-i="${i}">
+      <button class="act-btn"     title="Edit"   aria-label="Edit ${esc(p.name)}">
         <span class="material-symbols-outlined">edit</span>
       </button>
-      <button class="act-btn del" title="Delete" data-i="${i}">
+      <button class="act-btn del" title="Delete" aria-label="Delete ${esc(p.name)}">
         <span class="material-symbols-outlined">delete</span>
       </button>
     `;
-
-    row.querySelector(".act-btn:not(.del)").addEventListener("click", () => openEditModal(i));
-    row.querySelector(".act-btn.del").addEventListener("click", () => deletePurchase(i));
 
     list.appendChild(row);
   });
 
   totalDisplay.textContent = `Total: $${total.toFixed(2)}`;
-  saveLocal();
   updateHero();
   updateCategoryBars();
   renderTrendChart();
+}
+
+// One listener for the whole list rather than two per row, re-attached on
+// every render.
+document.addEventListener("click", e => {
+  const btn = e.target.closest(".purchase-item .act-btn");
+  if (!btn) return;
+  const id = btn.closest(".purchase-item")?.dataset.id;
+  if (!id) return;
+  btn.classList.contains("del") ? deletePurchase(id) : openEditModal(id);
+});
+
+// Render and persist. Callers that change `purchases` want both; keeping them
+// separate means drawing the list no longer quietly writes to storage.
+function saveAndRender() {
+  saveLocal();
+  renderPurchases();
 }
 
 // ===== Spending-over-time chart =====
@@ -476,21 +500,40 @@ function renderTrendChart() {
 }
 
 // ===== Category bar chart (replaces burn-up on home) =====
+// The set of months that currently has data, newest first.
+function monthsWithData() {
+  const months = new Set();
+  purchases.forEach(p => { if (p.date?.length >= 7) months.add(p.date.slice(0, 7)); });
+  return [...months].sort().reverse();
+}
+
+let renderedMonths = null;
+
+// Rebuild only when the available months actually change. This runs on every
+// render, and it used to tear down and rebuild the whole <select> each time —
+// with `innerHTML +=` in a loop, so the accumulated string was reparsed once
+// per option.
 function buildMonthOptions() {
   const select = document.getElementById("chartMonthFilter");
   if (!select) return;
-  const months  = new Set();
-  purchases.forEach(p => { if (p.date?.length >= 7) months.add(p.date.slice(0, 7)); });
-  const sorted  = [...months].sort().reverse();
+
+  const sorted = monthsWithData();
+  const key    = sorted.join(",");
+  if (key === renderedMonths) return;   // nothing new to show
+  renderedMonths = key;
+
   const current = select.value;
-  select.innerHTML = `<option value="">All time</option>`;
-  sorted.forEach(m => {
+  const options = sorted.map(m => {
     const [y, mo] = m.split("-");
-    const label   = new Date(y, parseInt(mo) - 1).toLocaleString("default", { month: "long", year: "numeric" });
-    select.innerHTML += `<option value="${m}">${label}</option>`;
+    const label   = new Date(Number(y), Number(mo) - 1)
+      .toLocaleString("default", { month: "long", year: "numeric" });
+    return `<option value="${m}">${label}</option>`;
   });
-  if (sorted.includes(current)) select.value = current;
-  chartMonth = select.value;
+
+  select.innerHTML = `<option value="">All time</option>` + options.join("");
+  // Keep the current selection if that month still has data.
+  select.value = sorted.includes(current) ? current : "";
+  chartMonth   = select.value;
 }
 
 function updateCategoryBars() {
@@ -604,7 +647,7 @@ async function addPurchase() {
   if (categorySelect) categorySelect.value = "";
 
   purchases.push(purchase);
-  renderPurchases();
+  saveAndRender();
 
   if (wasAuto) setSyncStatus(`Auto-categorized as "${category}"`, "ok");
 
@@ -617,7 +660,7 @@ async function addPurchase() {
     } catch (e) {
       console.warn("Sync failed", e);
       purchases = purchases.filter(p => p.id !== purchase.id);
-      renderPurchases();
+      saveAndRender();
       setSyncStatus("Sync failed — entry not saved ✗", "err");
     }
   } else {
@@ -626,8 +669,8 @@ async function addPurchase() {
 }
 
 // ===== Edit modal =====
-function openEditModal(index) {
-  const p = purchases[index];
+function openEditModal(id) {
+  const p = purchaseById(id);
   if (!p) return;
   document.getElementById("editModal")?.remove();
 
@@ -680,8 +723,7 @@ function openEditModal(index) {
     p.amount   = newAmt;
     p.date     = newDate;
     p.category = newCat || suggestCategory(newName);
-    renderPurchases();
-    saveLocal();
+    saveAndRender();
     overlay.remove();
 
     if (isSignedIn() && oldRow) {
@@ -699,10 +741,12 @@ function openEditModal(index) {
 }
 
 // ===== Delete =====
-async function deletePurchase(index) {
+async function deletePurchase(id) {
+  const index = purchases.findIndex(p => p.id === id);
+  if (index === -1) return;
   const purchase = purchases[index];
   purchases.splice(index, 1);
-  renderPurchases();
+  saveAndRender();
 
   if (!isSignedIn()) { setSyncStatus("Deleted locally", "ok"); return; }
 
