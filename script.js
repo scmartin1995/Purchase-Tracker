@@ -12,7 +12,11 @@ const LS_KEY_SHEET_GID = "userSheetGid";
 const LS_KEY_TOKEN     = "gAccessToken";
 const LS_KEY_TOKEN_EXP = "gAccessTokenExp";
 
-let purchases   = JSON.parse(localStorage.getItem("purchases")) || [];
+// Label for a purchase with no category. Deliberately NOT "Other" — that's a
+// category the user can pick on purpose. This one means "we don't know".
+const UNCATEGORIZED = "Uncategorized";
+
+let purchases   = loadPurchases();
 let tokenClient = null;
 let gapiReady   = false;
 let chartMonth  = "";
@@ -23,6 +27,33 @@ let SHEET_GID      = localStorage.getItem(LS_KEY_SHEET_GID) || null;
 // ===== Helpers =====
 function genId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+
+// Single definition of "an amount we'll display". Every total, bar, and table
+// runs through this so they can't disagree about which entries count.
+function isValidAmount(value) {
+  const n = parseFloat(value);
+  return Number.isFinite(n) && n > 0;
+}
+
+// Purchases are entered by hand and always positive — no refunds, no negatives.
+// Anything else in storage is legacy or corrupt, so drop it on the way in
+// rather than letting each screen filter it differently.
+function loadPurchases() {
+  let stored;
+  try {
+    stored = JSON.parse(localStorage.getItem("purchases")) || [];
+  } catch {
+    console.warn("Stored purchases were unreadable; starting empty.");
+    return [];
+  }
+  if (!Array.isArray(stored)) return [];
+
+  const kept = stored.filter(p => p && isValidAmount(p.amount));
+  if (kept.length !== stored.length) {
+    console.warn(`Dropped ${stored.length - kept.length} purchase(s) with an invalid amount.`);
+  }
+  return kept;
 }
 
 function esc(str) {
@@ -96,8 +127,9 @@ function barColor(category) {
     "Debt":          "var(--bar-debt)",
     "Savings":       "var(--bar-savings)",
     "Other":         "var(--bar-other)",
+    [UNCATEGORIZED]: "var(--bar-uncategorized)",
   };
-  return map[category] || "var(--bar-other)";
+  return map[category] || "var(--bar-uncategorized)";
 }
 
 // ===== Token persistence =====
@@ -139,20 +171,19 @@ function updateHero() {
   const labelEl  = document.getElementById("heroMonthLabel");
   const amountEl = document.getElementById("heroTotal");
   const subEl    = document.getElementById("heroSub");
-  if (!labelEl || !amountEl) return;
+  if (!labelEl || !amountEl || !subEl) return;
 
   const now   = new Date();
   const thisM = now.toLocaleDateString("en-CA").slice(0, 7); // YYYY-MM
   const lastM = new Date(now.getFullYear(), now.getMonth() - 1, 1)
     .toLocaleDateString("en-CA").slice(0, 7);
 
-  const thisTotal = purchases
-    .filter(p => p.date && p.date.startsWith(thisM))
-    .reduce((s, p) => s + parseFloat(p.amount || 0), 0);
+  const monthTotal = month => purchases
+    .filter(p => p.date?.startsWith(month) && isValidAmount(p.amount))
+    .reduce((s, p) => s + parseFloat(p.amount), 0);
 
-  const lastTotal = purchases
-    .filter(p => p.date && p.date.startsWith(lastM))
-    .reduce((s, p) => s + parseFloat(p.amount || 0), 0);
+  const thisTotal = monthTotal(thisM);
+  const lastTotal = monthTotal(lastM);
 
   const monthName = now.toLocaleString("default", { month: "long", year: "numeric" });
   labelEl.textContent  = monthName;
@@ -178,8 +209,8 @@ function renderPurchases() {
   let total = 0;
 
   purchases.forEach((p, i) => {
-    const amount = parseFloat(p.amount || 0);
-    if (!Number.isFinite(amount)) return;
+    if (!isValidAmount(p.amount)) return;
+    const amount = parseFloat(p.amount);
     total += amount;
 
     const row      = document.createElement("div");
@@ -248,9 +279,9 @@ function updateCategoryBars() {
   const totals = {};
   let grandTotal = 0;
   filtered.forEach(p => {
-    const amt = parseFloat(p.amount || 0);
-    if (!Number.isFinite(amt) || amt <= 0) return;
-    const cat = p.category || "Other";
+    if (!isValidAmount(p.amount)) return;
+    const amt = parseFloat(p.amount);
+    const cat = p.category || UNCATEGORIZED;
     totals[cat] = (totals[cat] || 0) + amt;
     grandTotal += amt;
   });
@@ -283,9 +314,9 @@ function computeCategoryTotals() {
   const totals = {};
   let grandTotal = 0;
   purchases.forEach(p => {
-    const amount = parseFloat(p.amount || 0);
-    if (!Number.isFinite(amount) || amount <= 0) return;
-    const cat    = p.category || "Uncategorized";
+    if (!isValidAmount(p.amount)) return;
+    const amount = parseFloat(p.amount);
+    const cat    = p.category || UNCATEGORIZED;
     totals[cat]  = (totals[cat] || 0) + amount;
     grandTotal  += amount;
   });
@@ -397,9 +428,9 @@ function openEditModal(index) {
     <div class="modal-box">
       <div class="card-label">Edit entry</div>
       <div class="input-grid" style="margin-bottom:8px;">
-        <input id="e-name"   type="text"   value="${esc(p.name)}"          placeholder="Item name" />
-        <input id="e-amount" type="number" value="${esc(String(p.amount))}" step="0.01" placeholder="$0.00" class="mono" />
-        <input id="e-date"   type="date"   value="${esc(p.date)}"           class="mono" />
+        <input id="e-name"   type="text"   placeholder="Item name" />
+        <input id="e-amount" type="number" step="0.01" placeholder="$0.00" class="mono" />
+        <input id="e-date"   type="date"   class="mono" />
       </div>
       <div class="cat-row">
         <select id="e-cat">${options}</select>
@@ -412,6 +443,12 @@ function openEditModal(index) {
   `;
 
   document.body.appendChild(overlay);
+
+  // Set as properties, not as HTML attributes. esc() escapes < > &, but not
+  // double quotes — a name like `55" TV` would close the attribute early.
+  overlay.querySelector("#e-name").value   = p.name ?? "";
+  overlay.querySelector("#e-amount").value = p.amount ?? "";
+  overlay.querySelector("#e-date").value   = p.date ?? "";
 
   overlay.querySelector("#e-cancel").addEventListener("click", () => overlay.remove());
   overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
@@ -675,6 +712,12 @@ function normalizeAmount(a) {
 
 // ===== Sign out =====
 async function signOutAndClear() {
+  if (!confirm(
+    "Sign out and erase all purchases on this device?\n\n" +
+    "Your Google Sheet keeps its data, but this app will forget which sheet " +
+    "is yours — you'd have to find it in Drive yourself."
+  )) return;
+
   try {
     const token = gapi.client.getToken();
     if (token?.access_token && google?.accounts?.oauth2?.revoke) {
