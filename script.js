@@ -98,38 +98,61 @@ function goPage(name) {
   if (name === "categories") renderCategorySummary();
 }
 
-// ===== Category pill class =====
+// ===== Categories =====
+// The single source of truth. Pill colors, bar colors, the auto-detect
+// keywords, and both dropdowns are all derived from this — so adding a
+// category is one edit here, not five scattered ones.
+//
+// ORDER MATTERS. suggestCategory() takes the first match, and keywords
+// overlap: "gas bill" hits Utilities' "gas bill" and Transportation's "gas",
+// and Utilities wins only by being listed first. Same for "rent payment"
+// (Housing before Debt's "payment"). Reordering this list changes what gets
+// auto-detected — the dropdowns just follow whatever order is here.
+const CATEGORIES = [
+  { name: "Groceries",      pill: "pill-groceries",      bar: "--bar-groceries",
+    keywords: ["grocery","market","walmart","costco","smiths","kroger","aldi","whole foods","trader joe","safeway","albertsons"] },
+  { name: "Dining Out",     pill: "pill-dining",         bar: "--bar-dining",
+    keywords: ["restaurant","grill","cafe","bar","mcdonald","taco","pizza","chipotle","sushi","diner","burrito","burger","kitchen"] },
+  { name: "Housing",        pill: "pill-housing",        bar: "--bar-housing",
+    keywords: ["rent","mortgage","landlord","hoa","lease"] },
+  { name: "Utilities",      pill: "pill-utilities",      bar: "--bar-utilities",
+    keywords: ["power","electric","gas bill","water bill","internet","comcast","xfinity","utility","spectrum","cox"] },
+  { name: "Transportation", pill: "pill-transportation", bar: "--bar-transport",
+    keywords: ["uber","lyft","gas","fuel","diesel","bus","train","parking","toll","transit","shell","chevron","texaco"] },
+  { name: "Entertainment",  pill: "pill-entertainment",  bar: "--bar-entertainment",
+    keywords: ["movie","cinema","netflix","hulu","spotify","concert","game","disney+","ticket","amazon prime","youtube"] },
+  { name: "Health",         pill: "pill-health",         bar: "--bar-health",
+    keywords: ["pharmacy","walgreens","cvs","doctor","clinic","copay","gym","dental","vision","hospital","rx"] },
+  { name: "Debt",           pill: "pill-debt",           bar: "--bar-debt",
+    keywords: ["loan","credit card","payment","collections","interest"] },
+  { name: "Savings",        pill: "pill-savings",        bar: "--bar-savings",
+    keywords: ["savings","investment","brokerage","roth","401k","vanguard","fidelity","schwab"] },
+  // Deliberately last and keyword-free: what suggestCategory() falls back to,
+  // and what you pick when nothing else fits.
+  { name: "Other",          pill: "pill-other",          bar: "--bar-other", keywords: [] },
+];
+
+// Styling for a purchase whose category is missing entirely. Not a real
+// category — never offered in a dropdown, never auto-detected.
+const UNCATEGORIZED_STYLE = { pill: "pill-uncategorized", bar: "--bar-uncategorized" };
+
+function categoryStyle(name) {
+  return CATEGORIES.find(c => c.name === name) || UNCATEGORIZED_STYLE;
+}
+
 function pillClass(category) {
-  const map = {
-    "Housing":       "pill-housing",
-    "Utilities":     "pill-utilities",
-    "Groceries":     "pill-groceries",
-    "Dining Out":    "pill-dining",
-    "Transportation":"pill-transportation",
-    "Entertainment": "pill-entertainment",
-    "Health":        "pill-health",
-    "Debt":          "pill-debt",
-    "Savings":       "pill-savings",
-    "Other":         "pill-other",
-  };
-  return map[category] || "pill-uncategorized";
+  return categoryStyle(category).pill;
 }
 
 function barColor(category) {
-  const map = {
-    "Housing":       "var(--bar-housing)",
-    "Utilities":     "var(--bar-utilities)",
-    "Groceries":     "var(--bar-groceries)",
-    "Dining Out":    "var(--bar-dining)",
-    "Transportation":"var(--bar-transport)",
-    "Entertainment": "var(--bar-entertainment)",
-    "Health":        "var(--bar-health)",
-    "Debt":          "var(--bar-debt)",
-    "Savings":       "var(--bar-savings)",
-    "Other":         "var(--bar-other)",
-    [UNCATEGORIZED]: "var(--bar-uncategorized)",
-  };
-  return map[category] || "var(--bar-uncategorized)";
+  return `var(${categoryStyle(category).bar})`;
+}
+
+// Shared by the add form and the edit dialog so they can't drift apart.
+function categoryOptionsHtml(selected) {
+  return CATEGORIES
+    .map(c => `<option value="${c.name}"${c.name === selected ? " selected" : ""}>${c.name}</option>`)
+    .join("");
 }
 
 // ===== Token persistence =====
@@ -343,23 +366,11 @@ function renderCategorySummary() {
 }
 
 // ===== Category guesser =====
+// First match wins, in CATEGORIES order — see the ordering note there.
 function suggestCategory(name) {
-  const n     = (name || "").toLowerCase();
-  const rules = [
-    { cat: "Groceries",      keywords: ["grocery","market","walmart","costco","smiths","kroger","aldi","whole foods","trader joe","safeway","albertsons"] },
-    { cat: "Dining Out",     keywords: ["restaurant","grill","cafe","bar","mcdonald","taco","pizza","chipotle","sushi","diner","burrito","burger","kitchen"] },
-    { cat: "Housing",        keywords: ["rent","mortgage","landlord","hoa","lease"] },
-    { cat: "Utilities",      keywords: ["power","electric","gas bill","water bill","internet","comcast","xfinity","utility","spectrum","cox"] },
-    { cat: "Transportation", keywords: ["uber","lyft","gas","fuel","diesel","bus","train","parking","toll","transit","shell","chevron","texaco"] },
-    { cat: "Entertainment",  keywords: ["movie","cinema","netflix","hulu","spotify","concert","game","disney+","ticket","amazon prime","youtube"] },
-    { cat: "Health",         keywords: ["pharmacy","walgreens","cvs","doctor","clinic","copay","gym","dental","vision","hospital","rx"] },
-    { cat: "Debt",           keywords: ["loan","credit card","payment","collections","interest"] },
-    { cat: "Savings",        keywords: ["savings","investment","brokerage","roth","401k","vanguard","fidelity","schwab"] },
-  ];
-  for (const rule of rules) {
-    if (rule.keywords.some(k => n.includes(k))) return rule.cat;
-  }
-  return "Other";
+  const n = (name || "").toLowerCase();
+  const hit = CATEGORIES.find(c => c.keywords.some(k => n.includes(k)));
+  return hit ? hit.name : "Other";
 }
 
 // ===== Add purchase =====
@@ -421,8 +432,7 @@ function openEditModal(index) {
   overlay.id      = "editModal";
   overlay.className = "modal-bg";
 
-  const cats = ["Housing","Utilities","Groceries","Dining Out","Transportation","Entertainment","Health","Debt","Savings","Other"];
-  const options = cats.map(c => `<option value="${c}"${c === p.category ? " selected" : ""}>${c}</option>`).join("");
+  const options = categoryOptionsHtml(p.category);
 
   overlay.innerHTML = `
     <div class="modal-box">
@@ -741,6 +751,11 @@ async function signOutAndClear() {
 window.addEventListener("load", async () => {
   const dateInput = document.getElementById("itemDate");
   if (dateInput) dateInput.value = todayStr();
+
+  // Fill the add form's category dropdown from CATEGORIES, keeping the
+  // "auto-detect if blank" option the markup already provides.
+  const catSelect = document.getElementById("itemCategory");
+  if (catSelect) catSelect.insertAdjacentHTML("beforeend", categoryOptionsHtml(""));
 
   const monthFilter = document.getElementById("chartMonthFilter");
   if (monthFilter) {
