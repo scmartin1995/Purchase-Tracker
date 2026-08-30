@@ -1,7 +1,20 @@
 // ===== Google / Sheets configuration =====
-// NOTE: Move CLIENT_ID to a build-time env var if this repo is ever public.
+// CLIENT_ID is NOT a secret and doesn't need hiding. A browser app's OAuth
+// client ID ships to every visitor no matter where the source lives — it's
+// readable in devtools on the live site whether this repo is public or not.
+// What actually restricts it is the Authorized JavaScript origins allowlist
+// in the Google Cloud Console, which is set to the Pages origin (verified
+// 2026-08-30).
 const CLIENT_ID = "624129803500-p9iq7i2mbngcr5ut675cg4n23mbhsajo.apps.googleusercontent.com";
-const SCOPES = "https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file";
+
+// drive.file only — access to files this app created, not to every
+// spreadsheet in the account. The broader `spreadsheets` scope was dropped as
+// redundant: every Sheets call here (create, get, values.get/update/append,
+// batchUpdate) accepts drive.file, each confirmed against Google's reference.
+// drive.file is also the scope Google labels "Recommended, Non-sensitive",
+// where `spreadsheets` is "Sensitive" — so the consent screen now asks for
+// noticeably less.
+const SCOPES = "https://www.googleapis.com/auth/drive.file";
 const DISCOVERY_DOC = "https://sheets.googleapis.com/$discovery/rest?version=v4";
 
 const SHEET_TITLE = "Sheet1";
