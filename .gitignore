@@ -1,0 +1,19 @@
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+
+# Local tooling that shouldn't ship with the app
+.claude/
+node_modules/
+*.log
+
+# Browser-download duplicates — this repo has been polluted with these before
+# ("index (1).html", "script (2).js" …), so keep them out.
+* (1).*
+* (2).*
+* (3).*
+* (4).*
+* (5).*
