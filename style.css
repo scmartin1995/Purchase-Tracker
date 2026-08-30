@@ -11,31 +11,51 @@
   --radius:   10px;
   --radius-sm: 6px;
 
-  /* Category colors — text, bg */
-  --c-housing:       #1a1a18; --cb-housing:       #e8e5e0;
-  --c-utilities:     #1e4a6e; --cb-utilities:     #ddeef8;
-  --c-groceries:     #1e4a28; --cb-groceries:     #ddf0e2;
-  --c-dining:        #6e2020; --cb-dining:        #f8dddd;
-  --c-transport:     #1e3060; --cb-transport:     #dde4f8;
-  --c-entertainment: #4a1e6e; --cb-entertainment: #eeddf8;
-  --c-health:        #4a1e50; --cb-health:        #f5ddf8;
-  --c-debt:          #6e3c1e; --cb-debt:          #f8eddd;
-  --c-savings:       #1e4a3a; --cb-savings:       #ddf0ea;
-  --c-other:         #4a4030; --cb-other:         #f0ede0;
-  --c-uncategorized: #4a4030; --cb-uncategorized: #f0ede0;
+  /* ── Category colors ──
+     Validated 2026-08-30 with the dataviz palette validator, not chosen by eye.
+     The previous set failed: Entertainment and Transportation were ΔE 2.5 apart
+     under deuteranopia (target ≥8) — the same color to ~6% of men — and Health
+     and Entertainment were ΔE 8.6 apart for NORMAL vision (floor 15).
+     This set: worst adjacent CVD 8.4, worst adjacent normal-vision 18.7.
 
-  /* Category bar accent colors */
-  --bar-housing:       #1a1a18;
-  --bar-utilities:     #3080b0;
-  --bar-groceries:     #2a8040;
-  --bar-dining:        #c04040;
-  --bar-transport:     #3050a0;
-  --bar-entertainment: #7030b0;
-  --bar-health:        #903090;
-  --bar-debt:          #b06020;
-  --bar-savings:       #208060;
-  --bar-other:         #806040;
-  --bar-uncategorized: #806040;
+     Housing and Other/Uncategorized are deliberate NEUTRALS, not hues — they
+     fail the chroma floor on purpose. Housing anchors the palette in the app's
+     ink; Other/Uncategorized are catch-alls, not peer categories. That keeps
+     the real hue count at seven, inside the ~8 ceiling a palette can carry.
+
+     Re-run before changing any value (order is the safety mechanism, so
+     reordering counts as changing it):
+       node scripts/validate_palette.js "<hexes in CATEGORIES order>" \
+            --mode light --surface "#ffffff"
+
+     Pill text/bg pairs are all ≥4.5:1 against each other. */
+
+  /* Category colors — pill text, pill bg */
+  --c-groceries:     #137b55; --cb-groceries:     #e4f5ef;
+  --c-dining:        #b04e27; --cb-dining:        #fdede7;
+  --c-housing:       #1a1a18; --cb-housing:       #e4e4e3;
+  --c-utilities:     #266cc1; --cb-utilities:     #e5effa;
+  --c-transport:     #007c00; --cb-transport:     #e0f0e0;
+  --c-entertainment: #a25673; --cb-entertainment: #fceff4;
+  --c-health:        #4a3aa7; --cb-health:        #e9e7f4;
+  --c-debt:          #b63a3a; --cb-debt:          #fce9e9;
+  --c-other:         #6e6d66; --cb-other:         #f1f1f0;
+  --c-uncategorized: #6e6d68; --cb-uncategorized: #f6f6f5;
+
+  /* Category bar accents — listed in CATEGORIES order, which is the order the
+     validator checked. Aqua and magenta sit below 3:1 on white; every bar
+     carries a visible name and value, and the Categories page is a table view,
+     which is the required relief. */
+  --bar-groceries:     #1baf7a;   /* aqua    */
+  --bar-dining:        #eb6834;   /* orange  */
+  --bar-housing:       #1a1a18;   /* neutral */
+  --bar-utilities:     #2a78d6;   /* blue    */
+  --bar-transport:     #008300;   /* green   */
+  --bar-entertainment: #e87ba4;   /* magenta */
+  --bar-health:        #4a3aa7;   /* violet  */
+  --bar-debt:          #e34948;   /* red     */
+  --bar-other:         #8a8880;   /* neutral */
+  --bar-uncategorized: #b8b6ae;   /* neutral */
 }
 
 /* ── Reset ── */
@@ -423,7 +443,6 @@ input::placeholder { color: var(--ink-3); }
 .pill-entertainment { color: var(--c-entertainment); background: var(--cb-entertainment); }
 .pill-health        { color: var(--c-health);        background: var(--cb-health); }
 .pill-debt          { color: var(--c-debt);          background: var(--cb-debt); }
-.pill-savings       { color: var(--c-savings);       background: var(--cb-savings); }
 .pill-other         { color: var(--c-other);         background: var(--cb-other); }
 .pill-uncategorized { color: var(--c-uncategorized); background: var(--cb-uncategorized); }
 

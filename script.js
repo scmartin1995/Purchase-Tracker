@@ -125,8 +125,6 @@ const CATEGORIES = [
     keywords: ["pharmacy","walgreens","cvs","doctor","clinic","copay","gym","dental","vision","hospital","rx"] },
   { name: "Debt",           pill: "pill-debt",           bar: "--bar-debt",
     keywords: ["loan","credit card","payment","collections","interest"] },
-  { name: "Savings",        pill: "pill-savings",        bar: "--bar-savings",
-    keywords: ["savings","investment","brokerage","roth","401k","vanguard","fidelity","schwab"] },
   // Deliberately last and keyword-free: what suggestCategory() falls back to,
   // and what you pick when nothing else fits.
   { name: "Other",          pill: "pill-other",          bar: "--bar-other", keywords: [] },
@@ -149,9 +147,16 @@ function barColor(category) {
 }
 
 // Shared by the add form and the edit dialog so they can't drift apart.
+//
+// A purchase may carry a category that no longer exists — "Savings" was
+// removed, and older rows can come back from the Sheet with anything. Keep the
+// current value as an option so opening the edit dialog doesn't silently
+// re-file the purchase under whichever category happens to be first.
 function categoryOptionsHtml(selected) {
-  return CATEGORIES
-    .map(c => `<option value="${c.name}"${c.name === selected ? " selected" : ""}>${c.name}</option>`)
+  const names = CATEGORIES.map(c => c.name);
+  if (selected && !names.includes(selected)) names.push(selected);
+  return names
+    .map(n => `<option value="${esc(n)}"${n === selected ? " selected" : ""}>${esc(n)}</option>`)
     .join("");
 }
 
