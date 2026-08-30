@@ -270,6 +270,149 @@ function renderPurchases() {
   saveLocal();
   updateHero();
   updateCategoryBars();
+  renderTrendChart();
+}
+
+// ===== Spending-over-time chart =====
+// One measure over time, so one color — not a hue per category. The current
+// period is picked out in ink and everything else recedes to gray, because
+// the period in progress is incomplete and shouldn't read as a fair
+// comparison against finished ones.
+let trendChart = null;
+
+function cssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+// Buckets by day when a single month is selected, by month otherwise.
+function trendBuckets() {
+  const valid = purchases.filter(p => p.date && isValidAmount(p.amount));
+
+  if (chartMonth) {
+    const [y, m] = chartMonth.split("-").map(Number);
+    const days   = new Date(y, m, 0).getDate();
+    const totals = new Array(days).fill(0);
+    valid
+      .filter(p => p.date.startsWith(chartMonth))
+      .forEach(p => {
+        const d = parseInt(p.date.slice(8, 10), 10);
+        if (d >= 1 && d <= days) totals[d - 1] += parseFloat(p.amount);
+      });
+
+    const today   = new Date();
+    const isNow   = chartMonth === today.toLocaleDateString("en-CA").slice(0, 7);
+    const heading = new Date(y, m - 1).toLocaleString("default", { month: "long", year: "numeric" });
+    return {
+      labels:  totals.map((_, i) => String(i + 1)),
+      values:  totals,
+      current: isNow ? today.getDate() - 1 : -1,
+      heading: `Daily spending — ${heading}`,
+      note:    isNow ? "This month is still in progress." : "",
+      unit:    "day",
+    };
+  }
+
+  // All time: last 12 months that have data, oldest first.
+  const byMonth = {};
+  valid.forEach(p => {
+    const key = p.date.slice(0, 7);
+    byMonth[key] = (byMonth[key] || 0) + parseFloat(p.amount);
+  });
+  const months  = Object.keys(byMonth).sort().slice(-12);
+  const thisM   = new Date().toLocaleDateString("en-CA").slice(0, 7);
+  return {
+    labels:  months.map(k => {
+      const [y, m] = k.split("-");
+      return new Date(y, m - 1).toLocaleString("default", { month: "short" }) + " " + y.slice(2);
+    }),
+    values:  months.map(k => byMonth[k]),
+    current: months.indexOf(thisM),
+    heading: "Spending by month",
+    note:    months.includes(thisM) ? "This month is still in progress." : "",
+    unit:    "month",
+  };
+}
+
+function renderTrendChart() {
+  const card   = document.getElementById("trendCard");
+  const canvas = document.getElementById("trendChart");
+  if (!card || !canvas) return;
+
+  // Chart.js comes from a CDN. On a first visit with no network it won't be
+  // there — hide the card rather than break the page.
+  if (typeof Chart === "undefined") { card.style.display = "none"; return; }
+
+  const { labels, values, current, heading, note, unit } = trendBuckets();
+  const hasData = values.some(v => v > 0);
+  card.style.display = hasData ? "" : "none";
+  if (!hasData) { trendChart?.destroy(); trendChart = null; return; }
+
+  document.getElementById("trendLabel").textContent = heading;
+  document.getElementById("trendNote").textContent  = note;
+
+  const accent  = cssVar("--ink")   || "#1a1a18";
+  const context = cssVar("--ink-3") || "#aaa89f";
+  const rule    = cssVar("--rule-2") || "#f0ede8";
+  const ink2    = cssVar("--ink-2") || "#6a6860";
+
+  trendChart?.destroy();
+  trendChart = new Chart(canvas.getContext("2d"), {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [{
+        data: values,
+        backgroundColor: values.map((_, i) => i === current ? accent : context),
+        // Rounded at the data end, square on the baseline.
+        borderRadius: { topLeft: 4, topRight: 4, bottomLeft: 0, bottomRight: 0 },
+        borderSkipped: false,
+        maxBarThickness: 24,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 250 },
+      plugins: {
+        legend: { display: false },   // one series — the card label names it
+        tooltip: {
+          backgroundColor: accent,
+          padding: 10,
+          displayColors: false,
+          titleFont: { family: "'IBM Plex Mono', monospace", size: 11 },
+          bodyFont:  { family: "'IBM Plex Mono', monospace", size: 12 },
+          callbacks: {
+            title: items => unit === "day" ? `Day ${items[0].label}` : items[0].label,
+            label: item => `$${item.parsed.y.toFixed(2)}`,
+          },
+        },
+      },
+      scales: {
+        x: {
+          grid:   { display: false },
+          border: { color: rule },
+          ticks:  {
+            color: ink2,
+            font: { family: "'IBM Plex Mono', monospace", size: 10 },
+            maxRotation: 0,
+            autoSkipPadding: 12,
+          },
+        },
+        y: {
+          beginAtZero: true,
+          grid:   { color: rule, drawTicks: false },   // hairline, solid, recessive
+          border: { display: false },
+          ticks:  {
+            color: ink2,
+            font: { family: "'IBM Plex Mono', monospace", size: 10 },
+            padding: 8,
+            maxTicksLimit: 5,
+            callback: v => "$" + (v >= 1000 ? (v / 1000) + "k" : v),
+          },
+        },
+      },
+    },
+  });
 }
 
 // ===== Category bar chart (replaces burn-up on home) =====
@@ -762,6 +905,7 @@ window.addEventListener("load", async () => {
     monthFilter.addEventListener("change", () => {
       chartMonth = monthFilter.value;
       updateCategoryBars();
+      renderTrendChart();
     });
   }
 

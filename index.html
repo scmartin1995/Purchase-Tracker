@@ -10,7 +10,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Material+Symbols+Outlined" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <!-- defer: charts are drawn on window load, so this needn't block first paint.
+       If it fails (offline first visit) the app still works; charts just hide. -->
+  <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
   <script src="https://apis.google.com/js/api.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
@@ -82,13 +84,22 @@
       <div id="syncStatus" class="status-pill">Not synced yet</div>
     </section>
 
+    <!-- One filter row, scoping every chart below it. -->
+    <div class="filter-row">
+      <span class="filter-label">Showing</span>
+      <select id="chartMonthFilter" class="month-select mono" aria-label="Time period">
+        <option value="">All time</option>
+      </select>
+    </div>
+
+    <section class="card" id="trendCard">
+      <div class="card-label" id="trendLabel">Spending over time</div>
+      <div class="chart-wrap"><canvas id="trendChart"></canvas></div>
+      <p class="chart-note" id="trendNote"></p>
+    </section>
+
     <section class="card">
-      <div class="chart-top">
-        <div class="card-label" style="margin-bottom:0;">Spending</div>
-        <select id="chartMonthFilter" class="month-select mono">
-          <option value="">All time</option>
-        </select>
-      </div>
+      <div class="card-label">By category</div>
       <div id="categoryBars" class="cat-bars"></div>
     </section>
   </main>
