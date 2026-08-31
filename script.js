@@ -32,7 +32,7 @@ const UNCATEGORIZED = "Uncategorized";
 let purchases   = loadPurchases();
 let tokenClient = null;
 let gapiReady   = false;
-let chartMonth  = "";
+let chartRange  = "";   // "" | "7d" | "14d" | "YYYY-MM" — see ROLLING_RANGES
 
 let SPREADSHEET_ID = localStorage.getItem(LS_KEY_SHEET_ID)  || null;
 let SHEET_GID      = localStorage.getItem(LS_KEY_SHEET_GID) || null;
@@ -368,23 +368,94 @@ function cssVar(name) {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
-// Buckets by day when a single month is selected, by month otherwise.
+// ===== Time range =====
+// The filter's value is one of:
+//   ""        all time
+//   "7d"/"14d" a rolling window ending today
+//   "YYYY-MM"  one calendar month
+// Rolling windows and months bucket differently, so they're kept distinct
+// rather than collapsed into a start/end pair.
+const ROLLING_RANGES = [
+  { value: "7d",  label: "Last 7 days",  days: 7  },
+  { value: "14d", label: "Last 14 days", days: 14 },
+];
+
+function rollingDays(value) {
+  return ROLLING_RANGES.find(r => r.value === value)?.days || null;
+}
+
+// The last n dates as YYYY-MM-DD, oldest first, ending today. Built by
+// stepping a local Date so it lands on real calendar days across month and
+// DST boundaries rather than subtracting milliseconds.
+function lastNDates(n) {
+  const out = [];
+  const d = new Date();
+  d.setHours(12, 0, 0, 0);            // midday: immune to DST shifts
+  d.setDate(d.getDate() - (n - 1));
+  for (let i = 0; i < n; i++) {
+    out.push(d.toLocaleDateString("en-CA"));
+    d.setDate(d.getDate() + 1);
+  }
+  return out;
+}
+
+// One definition of "is this purchase in the selected range", shared by the
+// chart and the category bars so they can't disagree.
+function inSelectedRange(p) {
+  if (!p.date) return false;
+  const days = rollingDays(chartRange);
+  if (days) return p.date >= lastNDates(days)[0] && p.date <= todayStr();
+  if (chartRange) return p.date.startsWith(chartRange);
+  return true;
+}
+
+function rangeLabel() {
+  const days = rollingDays(chartRange);
+  if (days) return `the last ${days} days`;
+  if (chartRange) {
+    const [y, m] = chartRange.split("-").map(Number);
+    return new Date(y, m - 1).toLocaleString("default", { month: "long", year: "numeric" });
+  }
+  return "any period";
+}
+
+// Buckets by day for a rolling range or a single month, by month otherwise.
 function trendBuckets() {
   const valid = purchases.filter(p => p.date && isValidAmount(p.amount));
 
-  if (chartMonth) {
-    const [y, m] = chartMonth.split("-").map(Number);
-    const days   = new Date(y, m, 0).getDate();
-    const totals = new Array(days).fill(0);
+  // Rolling "last N days", ending today.
+  const days = rollingDays(chartRange);
+  if (days) {
+    const dates  = lastNDates(days);
+    const totals = dates.map(d =>
+      valid.filter(p => p.date === d)
+           .reduce((s, p) => s + parseFloat(p.amount), 0));
+    return {
+      labels:  dates.map(d => {
+        const [y, m, day] = d.split("-").map(Number);
+        return new Date(y, m - 1, day).toLocaleString("default", { month: "short", day: "numeric" });
+      }),
+      values:  totals,
+      current: dates.length - 1,          // today is always the last bucket
+      heading: `Daily spending — last ${days} days`,
+      note:    "Today is still in progress.",
+      unit:    "date",
+    };
+  }
+
+  if (chartRange) {
+    const [y, m] = chartRange.split("-").map(Number);
+    const inMonth = new Date(y, m, 0).getDate();
+    const totals = new Array(inMonth).fill(0);
     valid
-      .filter(p => p.date.startsWith(chartMonth))
+      .filter(p => p.date.startsWith(chartRange))
       .forEach(p => {
         const d = parseInt(p.date.slice(8, 10), 10);
-        if (d >= 1 && d <= days) totals[d - 1] += parseFloat(p.amount);
+        if (d >= 1 && d <= inMonth) totals[d - 1] += parseFloat(p.amount);
       });
 
     const today   = new Date();
-    const isNow   = chartMonth === today.toLocaleDateString("en-CA").slice(0, 7);
+    const isNow   = chartRange === today.toLocaleDateString("en-CA").slice(0, 7);
     const heading = new Date(y, m - 1).toLocaleString("default", { month: "long", year: "numeric" });
     return {
       labels:  totals.map((_, i) => String(i + 1)),
@@ -523,17 +594,28 @@ function buildMonthOptions() {
   renderedMonths = key;
 
   const current = select.value;
-  const options = sorted.map(m => {
+  const months  = sorted.map(m => {
     const [y, mo] = m.split("-");
     const label   = new Date(Number(y), Number(mo) - 1)
       .toLocaleString("default", { month: "long", year: "numeric" });
     return `<option value="${m}">${label}</option>`;
   });
 
-  select.innerHTML = `<option value="">All time</option>` + options.join("");
-  // Keep the current selection if that month still has data.
-  select.value = sorted.includes(current) ? current : "";
-  chartMonth   = select.value;
+  // Rolling windows are always offered, even with no data in them — an empty
+  // "last 7 days" is a real answer, not a missing option.
+  const rolling = ROLLING_RANGES
+    .map(r => `<option value="${r.value}">${r.label}</option>`)
+    .join("");
+
+  select.innerHTML =
+    `<option value="">All time</option>` +
+    rolling +
+    months.join("");
+
+  // Keep the current selection if it's still offered.
+  const stillValid = current === "" || rollingDays(current) || sorted.includes(current);
+  select.value = stillValid ? current : "";
+  chartRange   = select.value;
 }
 
 function updateCategoryBars() {
@@ -542,13 +624,10 @@ function updateCategoryBars() {
 
   buildMonthOptions();
 
-  let filtered = [...purchases];
-  if (chartMonth) filtered = filtered.filter(p => p.date?.startsWith(chartMonth));
-
   const totals = {};
   let grandTotal = 0;
-  filtered.forEach(p => {
-    if (!isValidAmount(p.amount)) return;
+  purchases.forEach(p => {
+    if (!isValidAmount(p.amount) || !inSelectedRange(p)) return;
     const amt = parseFloat(p.amount);
     const cat = p.category || UNCATEGORIZED;
     totals[cat] = (totals[cat] || 0) + amt;
@@ -557,7 +636,11 @@ function updateCategoryBars() {
 
   container.innerHTML = "";
   if (grandTotal === 0) {
-    container.innerHTML = `<p class="subtle">No purchases yet.</p>`;
+    // Say which period is empty — "No purchases yet" is misleading when the
+    // user has plenty of purchases, just none in the last 7 days.
+    container.innerHTML = purchases.length
+      ? `<p class="subtle">No purchases in ${esc(rangeLabel())}.</p>`
+      : `<p class="subtle">No purchases yet.</p>`;
     return;
   }
 
@@ -1013,7 +1096,7 @@ window.addEventListener("load", async () => {
   const monthFilter = document.getElementById("chartMonthFilter");
   if (monthFilter) {
     monthFilter.addEventListener("change", () => {
-      chartMonth = monthFilter.value;
+      chartRange = monthFilter.value;
       updateCategoryBars();
       renderTrendChart();
     });

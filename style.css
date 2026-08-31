@@ -61,6 +61,31 @@
 /* ── Reset ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* Controls and chrome are not text to be selected. Without this, a tap that
+   lingers even slightly on iOS selects the label inside the button, pops the
+   selection handles, and offers "Look Up" — a dictionary definition of the
+   word you tapped. Purchase names and amounts stay selectable on purpose, so
+   they can still be copied. */
+button,
+.menu-link,
+.appbar-logo,
+.card-label,
+.filter-label,
+.hero-label,
+.cat-pill,
+.cat-table th,
+label {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* Kill the grey box iOS/Android paint over a tapped control; the buttons
+   already have their own hover and active styling. */
+button, select, .menu-link {
+  -webkit-tap-highlight-color: transparent;
+}
+
 html, body {
   height: 100%;
   font-family: 'Syne', system-ui, sans-serif;
