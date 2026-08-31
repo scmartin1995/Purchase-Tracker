@@ -135,12 +135,29 @@ body { display: flex; flex-direction: column; overflow: hidden; }
   width: 240px;
   background: var(--ink);
   transform: translateX(-100%);
-  transition: transform .2s ease-out;
   z-index: 200;
   display: flex;
   flex-direction: column;
+
+  /* A closed drawer is hidden, not merely parked off-screen. Translating it
+     out of view leaves it painted and focusable: it could flash during a
+     repaint (history navigation was doing exactly that), and its links stayed
+     tabbable while shut — focusable content inside an aria-hidden element.
+
+     visibility gets a real duration, NOT `0s` with a delay. Chrome won't start
+     a transition on an element that isn't rendered, so hiding it outright and
+     then flipping both properties at once left the transform pinned at its
+     start value and the drawer never slid in — no transition events fired at
+     all. Sharing the duration keeps the element rendered for the whole
+     animation. visibility is discrete, so it still flips to visible at the
+     start of opening and holds until the end of closing. */
+  visibility: hidden;
+  transition: transform .2s ease-out, visibility .2s;
 }
-.side-menu.open { transform: translateX(0); }
+.side-menu.open {
+  transform: translateX(0);
+  visibility: visible;
+}
 
 .menu-header {
   display: flex;
