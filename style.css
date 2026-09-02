@@ -376,13 +376,23 @@ input::placeholder { color: var(--ink-3); }
 .status-pill.err { color: #901a1a; background: #fdf0f0; border-color: #f0c8c8; }
 
 /* ── Filter row ──
-   Sits above the charts it scopes, not inside a chart card, so every chart
-   below re-renders against the same slice. */
+   Sits above the content it scopes, not inside a card, so everything below
+   re-renders against the same slice. Wraps rather than squeezing: on a
+   narrow phone the From date drops to its own line instead of shrinking the
+   dropdown to unreadable. */
 .filter-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   padding: 14px 20px 0;
+}
+/* Each label stays glued to the control it names, so a wrap on a narrow
+   phone breaks between the two filters rather than orphaning a label. */
+.filter-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 .filter-label {
   font-size: 10px;
@@ -397,6 +407,33 @@ input::placeholder { color: var(--ink-3); }
   font-size: 11px;
   border-radius: var(--radius-sm);
 }
+
+/* The From date and its clear button. The shared `input` rule stretches to
+   100% width for the stacked entry form; these sit inline, so they size to
+   their content instead. */
+.range-from {
+  width: auto;
+  padding: 5px 8px;
+  font-size: 11px;
+  border-color: var(--rule-2);
+}
+.range-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+/* `display` on the rule above outranks the UA stylesheet's [hidden] rule, so
+   the button has to opt back out explicitly or it shows with nothing to clear. */
+.range-clear[hidden] { display: none; }
+.range-clear:hover { background: var(--rule-2); color: var(--ink); }
+.range-clear .material-symbols-outlined { font-size: 16px; }
 
 /* ── Charts ──
    Height covers the plot AND the x-axis band, so the axis labels never get

@@ -92,13 +92,10 @@
         <div id="syncStatus" class="status-pill" role="status">Not synced yet</div>
       </section>
 
-      <!-- One filter row, scoping every chart below it. -->
-      <div class="filter-row">
-        <label class="filter-label" for="chartMonthFilter">Showing</label>
-        <select id="chartMonthFilter" class="month-select mono">
-          <option value="">All time</option>
-        </select>
-      </div>
+      <!-- Mount point for the shared filter row. The Purchases page has one
+           too and both drive the same range; script.js fills them from
+           #filterRowTpl and keeps their values in step. -->
+      <div class="filter-mount"></div>
 
       <section class="card" id="trendCard">
         <div class="card-label" id="trendLabel">Spending over time</div>
@@ -114,8 +111,10 @@
 
     <!-- PURCHASES -->
     <section id="page-purchases" class="page" aria-label="All purchases">
+      <div class="filter-mount"></div>
+
       <section class="card">
-        <div class="card-label">All purchases</div>
+        <div class="card-label" id="purchaseListLabel">All purchases</div>
         <div id="purchaseList" class="purchase-list"></div>
       </section>
     </section>
@@ -134,6 +133,25 @@
   </main>
 
   <footer class="total-bar" id="totalSpent">Total: $0.00</footer>
+
+  <!-- One definition of the filter row, cloned into every .filter-mount, so
+       the two copies can't drift apart. The dropdown's options are generated
+       from the months that actually have data, hence the empty <select>. -->
+  <template id="filterRowTpl">
+    <div class="filter-row">
+      <span class="filter-group">
+        <span class="filter-label">Showing</span>
+        <select class="range-select month-select mono" aria-label="Show a preset period"></select>
+      </span>
+      <span class="filter-group">
+        <span class="filter-label">From</span>
+        <input type="date" class="range-from mono" aria-label="Show purchases from this date onward" />
+        <button type="button" class="range-clear" data-action="clear-range" aria-label="Clear the from date" hidden>
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </span>
+    </div>
+  </template>
 
   <script src="script.js"></script>
   <script>
