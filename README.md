@@ -62,6 +62,23 @@ Google Sheet is the durable copy. Each purchase carries a generated `id` and a
   could predict from looking at the controls.
 - **The service worker is network-first for HTML/JS/CSS**, so deploys land
   without bumping `CACHE_NAME` by hand.
+- **Anything the sheet doesn't have goes up on the next sign-in.**
+  `pushUnsyncedPurchases()` appends every purchase still without a `row` once
+  `reconcileLocalWithSheet()` has matched what it can, in one batched call.
+  That's what gets an entry made while signed out into the sheet.
+- **Duplicates are prevented by the id in column E, not by a timestamp.**
+  Reconcile matches on it first, so an append that landed but never reported
+  back is matched rather than re-sent. Don't replace this with a "last synced
+  at" watermark: `date` is the purchase date and is backdatable, and a
+  half-failed upload would either lose entries or duplicate them.
+- **A failed sheet write never discards the entry.** It stays local without a
+  `row` — exactly the state the next sync uploads.
+- **A cached `row` is a hint, never a write address.** Every update and delete
+  calls `resolveSheetRow()` first, matching the id in column E. Row numbers are
+  positions and positions move: a sheet delete that commits but fails to report
+  back leaves everything below it off by one, and so does tidying the sheet by
+  hand in Google Sheets. Writing to a stale row overwrites whichever purchase
+  now sits there. `row` survives only to decide what still needs uploading.
 - **Amounts are always positive.** This tracks purchases; there's no refund or
   negative-amount concept, and invalid entries are dropped when loading.
 

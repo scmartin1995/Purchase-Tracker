@@ -19,6 +19,7 @@ const DISCOVERY_DOC = "https://sheets.googleapis.com/$discovery/rest?version=v4"
 
 const SHEET_TITLE = "Sheet1";
 const SHEET_RANGE = `${SHEET_TITLE}!A:E`; // Date, Name, Amount, Category, UUID
+const SHEET_BODY_RANGE = `${SHEET_TITLE}!A2:E`;   // the same, minus the header
 
 const LS_KEY_SHEET_ID  = "userSheetId";
 const LS_KEY_SHEET_GID = "userSheetGid";
@@ -958,10 +959,14 @@ async function addPurchase() {
       saveLocal();
       setSyncStatus(`Saved & synced ✓${wasAuto ? ` — ${category}` : ""}`, "ok");
     } catch (e) {
-      console.warn("Sync failed", e);
-      purchases = purchases.filter(p => p.id !== purchase.id);
-      saveAndRender();
-      setSyncStatus("Sync failed — entry not saved ✗", "err");
+      // Keep the entry. Without a row it's already in exactly the state
+      // pushUnsyncedPurchases() looks for, so it goes up on the next sync
+      // like anything entered while signed out. Throwing away what someone
+      // just typed because the network blipped is the worse failure, and if
+      // the append did land before erroring, reconcile matches it by id
+      // rather than duplicating it.
+      console.warn("Sync failed; keeping the entry to upload later", e);
+      setSyncStatus("Saved locally — sheet sync failed, will retry ✗", "err");
     }
   } else {
     setSyncStatus(`Saved locally${wasAuto ? ` — auto: ${category}` : ""}`, "ok");
@@ -1018,7 +1023,6 @@ function openEditModal(id) {
     if (!newName || !newDate) { alert("Please fill out all fields."); return; }
     if (!Number.isFinite(newAmt) || newAmt <= 0) { alert("Please enter a valid amount."); return; }
 
-    const oldRow = p.row;
     p.name     = newName;
     p.amount   = newAmt;
     p.date     = newDate;
@@ -1026,10 +1030,14 @@ function openEditModal(id) {
     saveAndRender();
     overlay.remove();
 
-    if (isSignedIn() && oldRow) {
+    // No "only if it already has a row" guard any more: updateRowOnSheet
+    // finds the row by id, so editing a purchase that never got a row number
+    // syncs instead of silently staying local.
+    if (isSignedIn()) {
       try {
-        await updateRowOnSheet(oldRow, p);
-        setSyncStatus("Edit synced ✓", "ok");
+        const row = await updateRowOnSheet(p);
+        saveLocal();
+        setSyncStatus(row ? "Edit synced ✓" : "Edit saved — will upload on next sync", "ok");
       } catch (e) {
         console.warn("Edit sync failed", e);
         setSyncStatus("Edit saved locally — sheet sync failed ✗", "err");
@@ -1052,14 +1060,20 @@ async function deletePurchase(id) {
 
   try {
     await ensureSheetInitialized();
-    if (!purchase.row) await reconcileLocalWithSheet();
-    if (purchase.row) {
-      await deleteRowOnSheet(purchase.row);
-      purchases.forEach(p => { if (p.row && p.row > purchase.row) p.row -= 1; });
+    // Resolve by id. reconcileLocalWithSheet() cannot help here — it walks
+    // `purchases`, and this purchase was spliced out of it a few lines ago,
+    // so it could never assign the row and the sheet row was left orphaned.
+    const row = await resolveSheetRow(purchase);
+    if (row) {
+      await deleteRowOnSheet(row);
+      // Everything below moved up. Best-effort cache refresh only —
+      // correctness no longer rests on it, because every write resolves its
+      // own row before touching the sheet.
+      purchases.forEach(p => { if (p.row && p.row > row) p.row -= 1; });
       saveLocal();
       setSyncStatus("Deleted from sheet ✓", "ok");
     } else {
-      setSyncStatus("Deleted locally — no sheet row found", "ok");
+      setSyncStatus("Deleted locally — it wasn't in the sheet", "ok");
     }
   } catch (e) {
     console.warn("Delete on sheet failed", e);
@@ -1099,14 +1113,30 @@ function initGIS() {
       if (resp.error) { console.warn("GIS token error", resp.error); setSyncStatus("Sign-in failed", "err"); return; }
       saveToken(resp);
       updateSignInButton();
+      // Two failure modes with different remedies, so they get their own
+      // handlers. No sheet means the Create Sheet button is the fix; a
+      // failed upload means try again later, and offering to create a
+      // second sheet would be actively wrong.
       try {
         await ensureSheetInitialized();
         await reconcileLocalWithSheet();
-        setSyncStatus("Signed in & synced ✓", "ok");
       } catch (e) {
         console.warn("Post sign-in setup failed", e);
         setSyncStatus("Could not set up Google Sheet", "err");
         showSheetHelper(true);
+        return;
+      }
+
+      try {
+        const uploaded = await pushUnsyncedPurchases();
+        setSyncStatus(uploaded
+          ? `Signed in & synced ✓ — ${uploaded} uploaded`
+          : "Signed in & synced ✓", "ok");
+      } catch (e) {
+        // Nothing is lost: the entries still have no row, so the next sync
+        // picks them up exactly as it would any pending entry.
+        console.warn("Upload of pending purchases failed", e);
+        setSyncStatus("Signed in — couldn't upload pending purchases, will retry ✗", "err");
       }
     },
   });
@@ -1191,14 +1221,43 @@ async function appendRowToSheet(p) {
   return rowNum;
 }
 
-async function updateRowOnSheet(rowNumber, p) {
+// ===== Finding a purchase's row =====
+// `row` caches a *position*, and positions move. A sheet delete that commits
+// but fails to report back leaves every row below it off by one; so does
+// tidying the sheet by hand in Google Sheets. Nothing re-checked the number,
+// so a stale one sent an edit to whichever purchase now sits there — quietly
+// overwriting it.
+//
+// So every write resolves its row from the id in column E first. It costs one
+// read on an operation that is already a network round trip, and it makes the
+// whole class of bug impossible rather than rarer. `row` is now a hint used
+// to decide what still needs uploading, never an address to write to.
+async function resolveSheetRow(p) {
+  if (!p?.id) return null;      // no id, nothing to match on
+  const resp = await gapi.client.sheets.spreadsheets.values.get({
+    spreadsheetId: SPREADSHEET_ID,
+    range: SHEET_BODY_RANGE,
+  });
+  const rows = resp.result.values || [];
+  const i    = rows.findIndex(r => (r[4] || "").trim() === p.id);
+  return i >= 0 ? i + 2 : null; // +2: rows are 1-based and row 1 is the header
+}
+
+// Returns the row written, or null if the purchase isn't in the sheet at all.
+// Either way p.row is left telling the truth, so the next sync uploads it if
+// it needs uploading.
+async function updateRowOnSheet(p) {
   await ensureSheetInitialized();
+  const row = await resolveSheetRow(p);
+  p.row = row;
+  if (!row) return null;
   await gapi.client.sheets.spreadsheets.values.update({
     spreadsheetId: SPREADSHEET_ID,
-    range: `${SHEET_TITLE}!A${rowNumber}:E${rowNumber}`,
+    range: `${SHEET_TITLE}!A${row}:E${row}`,
     valueInputOption: "USER_ENTERED",
     resource: { values: [[p.date, p.name, p.amount, p.category || "", p.id || ""]] }
   });
+  return row;
 }
 
 async function deleteRowOnSheet(rowNumber1Based) {
@@ -1225,7 +1284,7 @@ async function reconcileLocalWithSheet() {
   if (!SPREADSHEET_ID) return;
   const resp = await gapi.client.sheets.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
-    range: "Sheet1!A2:E",
+    range: SHEET_BODY_RANGE,
   });
   const values    = resp.result.values || [];
   const sheetRows = values.map((r, idx) => ({
@@ -1238,27 +1297,90 @@ async function reconcileLocalWithSheet() {
     matched:  false,
   }));
 
+  // Two passes, and every purchase is considered — not just the ones missing
+  // a row. A cached row is a position, and positions move when the sheet is
+  // changed from anywhere else, so this is where they get refreshed.
+  const matched = new Set();
+
+  // Pass 1 — by id. Unambiguous, so let these claim their rows before
+  // anything falls back to guessing on values.
   purchases.forEach(p => {
-    if (p.row) return;
-    let found = p.id ? sheetRows.find(s => !s.matched && s.uuid === p.id) : null;
-    if (!found) {
-      const t = { date: (p.date||"").trim(), name: (p.name||"").trim(), amount: normalizeAmount(p.amount) };
-      found = sheetRows.find(s => !s.matched && s.date === t.date && s.name === t.name && s.amount === t.amount);
-    }
-    if (found) {
-      p.row         = found.rowNumber;
-      found.matched = true;
-      if (!found.uuid && p.id && p.row) {
-        gapi.client.sheets.spreadsheets.values.update({
-          spreadsheetId: SPREADSHEET_ID,
-          range: `${SHEET_TITLE}!E${p.row}`,
-          valueInputOption: "RAW",
-          resource: { values: [[p.id]] }
-        }).catch(() => {});
-      }
+    if (!p.id) return;
+    const found = sheetRows.find(s => !s.matched && s.uuid === p.id);
+    if (!found) return;
+    p.row         = found.rowNumber;
+    found.matched = true;
+    matched.add(p);
+  });
+
+  // Pass 2 — rows the sheet has no id for, matched on their values. Those are
+  // legacy rows written before ids existed; backfill the id so pass 1 handles
+  // them next time.
+  purchases.forEach(p => {
+    if (matched.has(p)) return;
+    const t = { date: (p.date||"").trim(), name: (p.name||"").trim(), amount: normalizeAmount(p.amount) };
+    const found = sheetRows.find(s => !s.matched && s.date === t.date && s.name === t.name && s.amount === t.amount);
+    if (!found) return;
+    p.row         = found.rowNumber;
+    found.matched = true;
+    if (!found.uuid && p.id) {
+      gapi.client.sheets.spreadsheets.values.update({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `${SHEET_TITLE}!E${p.row}`,
+        valueInputOption: "RAW",
+        resource: { values: [[p.id]] }
+      }).catch(() => {});
     }
   });
   saveLocal();
+}
+
+// ===== Uploading what the sheet doesn't have =====
+// reconcileLocalWithSheet() matches local purchases to rows that already
+// exist. Whatever it can't match is genuinely absent from the sheet, so it
+// goes up here. This is what gets an entry made while signed out into the
+// sheet on the next sign-in — before this, nothing ever uploaded it, because
+// appendRowToSheet() was only ever reached from addPurchase() while signed
+// in.
+//
+// Duplicates are prevented by the id, not by a timestamp: every append
+// writes the purchase's id into column E and reconcile matches on it first,
+// so a purchase already in the sheet keeps its row and never reaches this
+// function. That holds even when a previous append wrote the row but died
+// before reporting back.
+//
+// Returns how many rows went up, so the caller can say so honestly.
+async function pushUnsyncedPurchases() {
+  const pending = purchases.filter(p => !p.row && isValidAmount(p.amount));
+  if (!pending.length) return 0;
+
+  await ensureSheetInitialized();
+  setSyncStatus(`Uploading ${pending.length} purchase${pending.length === 1 ? "" : "s"}…`);
+
+  // One append for the lot. The per-row alternative is n round trips and a
+  // half-uploaded state whenever one of them fails.
+  const resp = await gapi.client.sheets.spreadsheets.values.append({
+    spreadsheetId: SPREADSHEET_ID,
+    range: SHEET_RANGE,
+    valueInputOption: "USER_ENTERED",
+    insertDataOption: "INSERT_ROWS",
+    resource: {
+      values: pending.map(p => [p.date, p.name, p.amount, p.category || "", p.id || ""]),
+    },
+  });
+
+  // Sheets reports the block it wrote as e.g. "Sheet1!A12:E14", and the rows
+  // land in the order they were sent, so the nth pending purchase is at
+  // firstRow + n. If that range can't be read the rows are still in the
+  // sheet — leaving them without a row number is the safe failure, because
+  // the next reconcile matches them by id instead of uploading them twice.
+  const m = resp.result?.updates?.updatedRange?.match(/!A(\d+):/i);
+  if (m) {
+    const firstRow = parseInt(m[1], 10);
+    pending.forEach((p, i) => { p.row = firstRow + i; });
+    saveLocal();
+  }
+  return pending.length;
 }
 
 function normalizeAmount(a) {
@@ -1329,7 +1451,8 @@ window.addEventListener("load", async () => {
     try {
       await ensureSheetInitialized();
       await reconcileLocalWithSheet();
-      setSyncStatus("Synced ✓", "ok");
+      const uploaded = await pushUnsyncedPurchases();
+      setSyncStatus(uploaded ? `Synced ✓ — ${uploaded} uploaded` : "Synced ✓", "ok");
     } catch (e) {
       console.warn("Auto-sync failed", e);
       setSyncStatus("Session restored — sync later", "");
