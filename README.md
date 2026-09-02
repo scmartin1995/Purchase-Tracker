@@ -73,6 +73,12 @@ Google Sheet is the durable copy. Each purchase carries a generated `id` and a
   half-failed upload would either lose entries or duplicate them.
 - **A failed sheet write never discards the entry.** It stays local without a
   `row` — exactly the state the next sync uploads.
+- **A cached `row` is a hint, never a write address.** Every update and delete
+  calls `resolveSheetRow()` first, matching the id in column E. Row numbers are
+  positions and positions move: a sheet delete that commits but fails to report
+  back leaves everything below it off by one, and so does tidying the sheet by
+  hand in Google Sheets. Writing to a stale row overwrites whichever purchase
+  now sits there. `row` survives only to decide what still needs uploading.
 - **Amounts are always positive.** This tracks purchases; there's no refund or
   negative-amount concept, and invalid entries are dropped when loading.
 
