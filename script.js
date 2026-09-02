@@ -958,10 +958,14 @@ async function addPurchase() {
       saveLocal();
       setSyncStatus(`Saved & synced ✓${wasAuto ? ` — ${category}` : ""}`, "ok");
     } catch (e) {
-      console.warn("Sync failed", e);
-      purchases = purchases.filter(p => p.id !== purchase.id);
-      saveAndRender();
-      setSyncStatus("Sync failed — entry not saved ✗", "err");
+      // Keep the entry. Without a row it's already in exactly the state
+      // pushUnsyncedPurchases() looks for, so it goes up on the next sync
+      // like anything entered while signed out. Throwing away what someone
+      // just typed because the network blipped is the worse failure, and if
+      // the append did land before erroring, reconcile matches it by id
+      // rather than duplicating it.
+      console.warn("Sync failed; keeping the entry to upload later", e);
+      setSyncStatus("Saved locally — sheet sync failed, will retry ✗", "err");
     }
   } else {
     setSyncStatus(`Saved locally${wasAuto ? ` — auto: ${category}` : ""}`, "ok");
@@ -1099,14 +1103,30 @@ function initGIS() {
       if (resp.error) { console.warn("GIS token error", resp.error); setSyncStatus("Sign-in failed", "err"); return; }
       saveToken(resp);
       updateSignInButton();
+      // Two failure modes with different remedies, so they get their own
+      // handlers. No sheet means the Create Sheet button is the fix; a
+      // failed upload means try again later, and offering to create a
+      // second sheet would be actively wrong.
       try {
         await ensureSheetInitialized();
         await reconcileLocalWithSheet();
-        setSyncStatus("Signed in & synced ✓", "ok");
       } catch (e) {
         console.warn("Post sign-in setup failed", e);
         setSyncStatus("Could not set up Google Sheet", "err");
         showSheetHelper(true);
+        return;
+      }
+
+      try {
+        const uploaded = await pushUnsyncedPurchases();
+        setSyncStatus(uploaded
+          ? `Signed in & synced ✓ — ${uploaded} uploaded`
+          : "Signed in & synced ✓", "ok");
+      } catch (e) {
+        // Nothing is lost: the entries still have no row, so the next sync
+        // picks them up exactly as it would any pending entry.
+        console.warn("Upload of pending purchases failed", e);
+        setSyncStatus("Signed in — couldn't upload pending purchases, will retry ✗", "err");
       }
     },
   });
@@ -1261,6 +1281,54 @@ async function reconcileLocalWithSheet() {
   saveLocal();
 }
 
+// ===== Uploading what the sheet doesn't have =====
+// reconcileLocalWithSheet() matches local purchases to rows that already
+// exist. Whatever it can't match is genuinely absent from the sheet, so it
+// goes up here. This is what gets an entry made while signed out into the
+// sheet on the next sign-in — before this, nothing ever uploaded it, because
+// appendRowToSheet() was only ever reached from addPurchase() while signed
+// in.
+//
+// Duplicates are prevented by the id, not by a timestamp: every append
+// writes the purchase's id into column E and reconcile matches on it first,
+// so a purchase already in the sheet keeps its row and never reaches this
+// function. That holds even when a previous append wrote the row but died
+// before reporting back.
+//
+// Returns how many rows went up, so the caller can say so honestly.
+async function pushUnsyncedPurchases() {
+  const pending = purchases.filter(p => !p.row && isValidAmount(p.amount));
+  if (!pending.length) return 0;
+
+  await ensureSheetInitialized();
+  setSyncStatus(`Uploading ${pending.length} purchase${pending.length === 1 ? "" : "s"}…`);
+
+  // One append for the lot. The per-row alternative is n round trips and a
+  // half-uploaded state whenever one of them fails.
+  const resp = await gapi.client.sheets.spreadsheets.values.append({
+    spreadsheetId: SPREADSHEET_ID,
+    range: SHEET_RANGE,
+    valueInputOption: "USER_ENTERED",
+    insertDataOption: "INSERT_ROWS",
+    resource: {
+      values: pending.map(p => [p.date, p.name, p.amount, p.category || "", p.id || ""]),
+    },
+  });
+
+  // Sheets reports the block it wrote as e.g. "Sheet1!A12:E14", and the rows
+  // land in the order they were sent, so the nth pending purchase is at
+  // firstRow + n. If that range can't be read the rows are still in the
+  // sheet — leaving them without a row number is the safe failure, because
+  // the next reconcile matches them by id instead of uploading them twice.
+  const m = resp.result?.updates?.updatedRange?.match(/!A(\d+):/i);
+  if (m) {
+    const firstRow = parseInt(m[1], 10);
+    pending.forEach((p, i) => { p.row = firstRow + i; });
+    saveLocal();
+  }
+  return pending.length;
+}
+
 function normalizeAmount(a) {
   const n   = typeof a === "string" ? a.replace(/[^0-9.\-]/g, "") : a;
   const num = Number(n || 0);
@@ -1329,7 +1397,8 @@ window.addEventListener("load", async () => {
     try {
       await ensureSheetInitialized();
       await reconcileLocalWithSheet();
-      setSyncStatus("Synced ✓", "ok");
+      const uploaded = await pushUnsyncedPurchases();
+      setSyncStatus(uploaded ? `Synced ✓ — ${uploaded} uploaded` : "Synced ✓", "ok");
     } catch (e) {
       console.warn("Auto-sync failed", e);
       setSyncStatus("Session restored — sync later", "");
