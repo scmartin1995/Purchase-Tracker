@@ -51,6 +51,15 @@ Google Sheet is the durable copy. Each purchase carries a generated `id` and a
   and Transportation). Reordering changes what gets auto-detected.
 - **The category colors were validated, not chosen by eye.** There's a note in
   `style.css` with the command to re-run before changing any of them.
+- **`activeRange` in `script.js` is the single source of truth for the time
+  filter**, and `inSelectedRange()` is the only definition of "is this purchase
+  in it". The purchases list, the footer total, the hero, the category bars and
+  the trend chart all read from those two, so they can't disagree about which
+  entries count. The filter row itself is cloned from one `<template>` into
+  every `.filter-mount`, so the copies on Home and Purchases can't drift apart.
+- **One time filter at a time.** The preset dropdown and the From date clear
+  each other. Two overlapping ranges would need an intersection rule nobody
+  could predict from looking at the controls.
 - **The service worker is network-first for HTML/JS/CSS**, so deploys land
   without bumping `CACHE_NAME` by hand.
 - **Amounts are always positive.** This tracks purchases; there's no refund or

@@ -32,7 +32,10 @@ const UNCATEGORIZED = "Uncategorized";
 let purchases   = loadPurchases();
 let tokenClient = null;
 let gapiReady   = false;
-let chartRange  = "";   // "" | "7d" | "14d" | "YYYY-MM" — see ROLLING_RANGES
+// The one selected time range. It scopes the purchases list, the footer
+// total, the hero total, the category bars and the trend chart. See RANGE
+// VALUES below for the forms it takes.
+let activeRange = "";
 
 let SPREADSHEET_ID = localStorage.getItem(LS_KEY_SHEET_ID)  || null;
 let SHEET_GID      = localStorage.getItem(LS_KEY_SHEET_GID) || null;
@@ -149,6 +152,7 @@ const ACTIONS = {
   "add-purchase":  () => addPurchase(),
   "clear-device":  () => clearPurchases(),
   "create-sheet":  () => manualCreateSheet(),
+  "clear-range":   () => setRange(""),
 };
 
 document.addEventListener("click", e => {
@@ -253,36 +257,59 @@ function updateSignInButton() {
 }
 
 // ===== Hero block =====
+function monthTotal(month) {
+  return purchases
+    .filter(p => p.date?.startsWith(month) && isValidAmount(p.amount))
+    .reduce((s, p) => s + parseFloat(p.amount), 0);
+}
+
+// The month before a YYYY-MM, as YYYY-MM. Month index m - 2 is the previous
+// month, and Date rolls a negative index back into the previous year.
+function previousMonth(ym) {
+  const [y, m] = ym.split("-").map(Number);
+  return new Date(y, m - 2, 1).toLocaleDateString("en-CA").slice(0, 7);
+}
+
+// Unfiltered, this stays exactly what it always was: this month's total
+// against last month's. Once a range is picked the headline becomes that
+// range's total — a big number that ignores the filter right below it is
+// worse than no number.
 function updateHero() {
   const labelEl  = document.getElementById("heroMonthLabel");
   const amountEl = document.getElementById("heroTotal");
   const subEl    = document.getElementById("heroSub");
   if (!labelEl || !amountEl || !subEl) return;
 
-  const now   = new Date();
-  const thisM = now.toLocaleDateString("en-CA").slice(0, 7); // YYYY-MM
-  const lastM = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-    .toLocaleDateString("en-CA").slice(0, 7);
+  // A calendar month has an obvious thing to compare against. The default
+  // view is this month, and picking a month from the dropdown is the same
+  // question asked about a different one, so both take this path.
+  const month = activeRange
+    ? (/^\d{4}-\d{2}$/.test(activeRange) ? activeRange : null)
+    : todayStr().slice(0, 7);
 
-  const monthTotal = month => purchases
-    .filter(p => p.date?.startsWith(month) && isValidAmount(p.amount))
-    .reduce((s, p) => s + parseFloat(p.amount), 0);
+  if (month) {
+    const total = monthTotal(month);
+    const prev  = monthTotal(previousMonth(month));
+    labelEl.textContent  = monthTitle(month);
+    amountEl.textContent = `$${total.toFixed(2)}`;
 
-  const thisTotal = monthTotal(thisM);
-  const lastTotal = monthTotal(lastM);
-
-  const monthName = now.toLocaleString("default", { month: "long", year: "numeric" });
-  labelEl.textContent  = monthName;
-  amountEl.textContent = `$${thisTotal.toFixed(2)}`;
-
-  if (lastTotal > 0) {
-    const diff = thisTotal - lastTotal;
-    const pct  = Math.abs((diff / lastTotal) * 100).toFixed(0);
-    const sign = diff >= 0 ? "+" : "−";
-    subEl.textContent = `${sign}$${Math.abs(diff).toFixed(2)} (${sign}${pct}%) vs last month`;
-  } else {
-    subEl.textContent = "\u00a0";
+    if (prev > 0) {
+      const diff = total - prev;
+      const pct  = Math.abs((diff / prev) * 100).toFixed(0);
+      const sign = diff >= 0 ? "+" : "−";
+      subEl.textContent = `${sign}$${Math.abs(diff).toFixed(2)} (${sign}${pct}%) vs last month`;
+    } else {
+      subEl.textContent = "\u00a0";
+    }
+    return;
   }
+
+  // A rolling window or an open-ended "since" has no natural baseline, so
+  // show what makes up the number rather than invent one to compare against.
+  const { total, count } = rangeTotals();
+  labelEl.textContent  = rangeTitle();
+  amountEl.textContent = `$${total.toFixed(2)}`;
+  subEl.textContent    = count === 1 ? "1 purchase" : `${count} purchases`;
 }
 
 // ===== Rendering =====
@@ -298,13 +325,20 @@ function renderPurchases() {
   const totalDisplay = document.getElementById("totalSpent");
   if (!list || !totalDisplay) return;
 
+  // Refresh the preset options first: they can retire a month that just lost
+  // its last purchase, and everything below should draw against the
+  // corrected range rather than a stale one.
+  buildRangeOptions();
+
   list.innerHTML = "";
   let total = 0;
+  let shown = 0;
 
   purchases.forEach(p => {
-    if (!isValidAmount(p.amount)) return;
+    if (!isValidAmount(p.amount) || !inSelectedRange(p)) return;
     const amount = parseFloat(p.amount);
     total += amount;
+    shown++;
 
     const row      = document.createElement("div");
     row.className  = "purchase-item";
@@ -334,7 +368,22 @@ function renderPurchases() {
     list.appendChild(row);
   });
 
-  totalDisplay.textContent = `Total: $${total.toFixed(2)}`;
+  // Name the period that came up empty. "No purchases yet" would be a lie
+  // when there are plenty, just none since the chosen date.
+  if (!shown) {
+    list.innerHTML = purchases.length
+      ? `<p class="subtle">No purchases in ${esc(rangeLabel())}.</p>`
+      : `<p class="subtle">No purchases yet.</p>`;
+  }
+
+  // The card heading and the footer both name the range they're showing, so
+  // neither can be misread as the all-time figure while a filter is on.
+  const label = document.getElementById("purchaseListLabel");
+  if (label) label.textContent = activeRange ? `Purchases — ${rangeTitle()}` : "All purchases";
+
+  totalDisplay.textContent = activeRange
+    ? `Total (${rangeTitle()}): $${total.toFixed(2)}`
+    : `Total: $${total.toFixed(2)}`;
   updateHero();
   updateCategoryBars();
   renderTrendChart();
@@ -369,72 +418,211 @@ function cssVar(name) {
 }
 
 // ===== Time range =====
-// The filter's value is one of:
-//   ""        all time
-//   "7d"/"14d" a rolling window ending today
-//   "YYYY-MM"  one calendar month
-// Rolling windows and months bucket differently, so they're kept distinct
-// rather than collapsed into a start/end pair.
+// RANGE VALUES — activeRange is exactly one of:
+//   ""                 all time (the default)
+//   "7d" / "14d"       a rolling window ending today
+//   "YYYY-MM"          one calendar month
+//   "from:YYYY-MM-DD"  everything on or after that day, with no end
+// They stay distinct strings rather than collapsing into a start/end pair
+// because each buckets its chart differently and each labels itself
+// differently.
 const ROLLING_RANGES = [
   { value: "7d",  label: "Last 7 days",  days: 7  },
   { value: "14d", label: "Last 14 days", days: 14 },
 ];
 
+const FROM_PREFIX = "from:";
+
 function rollingDays(value) {
   return ROLLING_RANGES.find(r => r.value === value)?.days || null;
 }
 
-// The last n dates as YYYY-MM-DD, oldest first, ending today. Built by
-// stepping a local Date so it lands on real calendar days across month and
-// DST boundaries rather than subtracting milliseconds.
-function lastNDates(n) {
+// The start date of a "from:" range, or null when the range isn't one.
+function rangeFromDate(value = activeRange) {
+  return value.startsWith(FROM_PREFIX) ? value.slice(FROM_PREFIX.length) : null;
+}
+
+// ===== Date formatting =====
+// All of these build a Date from the parts rather than parsing the string.
+// `new Date("2026-01-15")` is read as UTC and lands on the 14th in any
+// timezone behind it, which is every US one.
+
+// YYYY-MM-DD → "Jan 15, 2026"
+function formatDay(iso) {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(y, m - 1, d)
+    .toLocaleString("default", { month: "short", day: "numeric", year: "numeric" });
+}
+
+// YYYY-MM → "January 2026"
+function monthTitle(ym) {
+  const [y, m] = ym.split("-").map(Number);
+  return new Date(y, m - 1).toLocaleString("default", { month: "long", year: "numeric" });
+}
+
+// Chart axis ticks, which need to be short.
+function dayTick(iso) {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleString("default", { month: "short", day: "numeric" });
+}
+
+function monthTick(ym) {
+  const [y, m] = ym.split("-");
+  return new Date(y, m - 1).toLocaleString("default", { month: "short" }) + " " + y.slice(2);
+}
+
+// ===== Date spans =====
+// Every calendar day from start to end inclusive, YYYY-MM-DD, oldest first.
+// Steps a local Date set to midday so a DST shift can't drop or repeat a day.
+// The cap is a backstop only — spans longer than a month get bucketed by
+// month, so nothing legitimate comes near it.
+function datesFrom(startIso, endIso) {
   const out = [];
-  const d = new Date();
-  d.setHours(12, 0, 0, 0);            // midday: immune to DST shifts
-  d.setDate(d.getDate() - (n - 1));
-  for (let i = 0; i < n; i++) {
-    out.push(d.toLocaleDateString("en-CA"));
-    d.setDate(d.getDate() + 1);
+  const [y, m, d] = startIso.split("-").map(Number);
+  const cur = new Date(y, m - 1, d, 12);
+  while (out.length < 400) {
+    const iso = cur.toLocaleDateString("en-CA");
+    if (iso > endIso) break;
+    out.push(iso);
+    cur.setDate(cur.getDate() + 1);
   }
   return out;
 }
 
+// Every month from start to end inclusive, YYYY-MM, oldest first.
+function monthsFrom(startYm, endYm) {
+  const out = [];
+  let [y, m] = startYm.split("-").map(Number);
+  while (out.length < 240) {
+    const key = `${y}-${String(m).padStart(2, "0")}`;
+    if (key > endYm) break;
+    out.push(key);
+    if (++m > 12) { m = 1; y++; }
+  }
+  return out;
+}
+
+// The last n dates, oldest first, ending today.
+function lastNDates(n) {
+  const d = new Date();
+  d.setHours(12, 0, 0, 0);            // midday: immune to DST shifts
+  d.setDate(d.getDate() - (n - 1));
+  return datesFrom(d.toLocaleDateString("en-CA"), todayStr());
+}
+
 // One definition of "is this purchase in the selected range", shared by the
-// chart and the category bars so they can't disagree.
+// list, the totals, the chart and the category bars so they can't disagree.
 function inSelectedRange(p) {
   if (!p.date) return false;
-  const days = rollingDays(chartRange);
+  const from = rangeFromDate();
+  if (from) return p.date >= from;    // "since" is open-ended on purpose
+  const days = rollingDays(activeRange);
   if (days) return p.date >= lastNDates(days)[0] && p.date <= todayStr();
-  if (chartRange) return p.date.startsWith(chartRange);
+  if (activeRange) return p.date.startsWith(activeRange);
   return true;
 }
 
+// The range as a heading: "All time", "Last 7 days", "January 2026",
+// "Since Jan 15, 2026".
+function rangeTitle() {
+  const from = rangeFromDate();
+  if (from) return `Since ${formatDay(from)}`;
+  const days = rollingDays(activeRange);
+  if (days) return `Last ${days} days`;
+  if (activeRange) return monthTitle(activeRange);
+  return "All time";
+}
+
+// The same range phrased to sit inside a sentence: "No purchases in ___."
 function rangeLabel() {
-  const days = rollingDays(chartRange);
+  const from = rangeFromDate();
+  if (from) return `the period since ${formatDay(from)}`;
+  const days = rollingDays(activeRange);
   if (days) return `the last ${days} days`;
-  if (chartRange) {
-    const [y, m] = chartRange.split("-").map(Number);
-    return new Date(y, m - 1).toLocaleString("default", { month: "long", year: "numeric" });
-  }
+  if (activeRange) return monthTitle(activeRange);
   return "any period";
 }
 
-// Buckets by day for a rolling range or a single month, by month otherwise.
+// Total and entry count for the selected range. The hero reads from here
+// rather than summing the list its own way.
+function rangeTotals() {
+  let total = 0;
+  let count = 0;
+  purchases.forEach(p => {
+    if (!isValidAmount(p.amount) || !inSelectedRange(p)) return;
+    total += parseFloat(p.amount);
+    count++;
+  });
+  return { total, count };
+}
+
+// Buckets by day for a rolling range, a single month, or a short "since"
+// span; by month for a long "since" span or for all time.
 function trendBuckets() {
   const valid = purchases.filter(p => p.date && isValidAmount(p.amount));
 
+  // "Since a date" — one open-ended span, so the bucket size comes from how
+  // long it turned out to be. Up to about a month reads well day by day;
+  // past that the bars get too thin to compare and months are the honest unit.
+  const from = rangeFromDate();
+  if (from) {
+    const today   = todayStr();
+    const start   = from > today ? today : from;   // a future start would give an empty span
+    const inRange = valid.filter(p => p.date >= start);
+    // A purchase can be dated ahead of today and inSelectedRange counts it,
+    // so run the axis out to the latest entry instead of stopping at today
+    // and quietly leaving it out of a chart whose total includes it.
+    const end   = inRange.reduce((mx, p) => (p.date > mx ? p.date : mx), today);
+    const dates = datesFrom(start, end);
+
+    if (dates.length <= 31) {
+      const totals  = dates.map(d =>
+        inRange.filter(p => p.date === d)
+               .reduce((s, p) => s + parseFloat(p.amount), 0));
+      const current = dates.indexOf(today);
+      return {
+        labels:  dates.map(dayTick),
+        values:  totals,
+        current,
+        heading: `Daily spending — since ${formatDay(from)}`,
+        note:    current >= 0 ? "Today is still in progress." : "",
+        unit:    "date",
+      };
+    }
+
+    const allMonths = monthsFrom(start.slice(0, 7), end.slice(0, 7));
+    const months    = allMonths.slice(-24);        // keep the axis readable
+    const byMonth   = {};
+    inRange.forEach(p => {
+      const k = p.date.slice(0, 7);
+      byMonth[k] = (byMonth[k] || 0) + parseFloat(p.amount);
+    });
+    const current = months.indexOf(today.slice(0, 7));
+    // If the axis was trimmed, say so — the chart would otherwise show less
+    // than the total above it without admitting to it.
+    const trimmed = allMonths.length - months.length;
+    return {
+      labels:  months.map(monthTick),
+      values:  months.map(k => byMonth[k] || 0),
+      current,
+      heading: `Monthly spending — since ${formatDay(from)}`,
+      note:    [
+        trimmed ? `Showing the last ${months.length} of ${allMonths.length} months.` : "",
+        current >= 0 ? "This month is still in progress." : "",
+      ].filter(Boolean).join(" "),
+      unit:    "month",
+    };
+  }
+
   // Rolling "last N days", ending today.
-  const days = rollingDays(chartRange);
+  const days = rollingDays(activeRange);
   if (days) {
     const dates  = lastNDates(days);
     const totals = dates.map(d =>
       valid.filter(p => p.date === d)
            .reduce((s, p) => s + parseFloat(p.amount), 0));
     return {
-      labels:  dates.map(d => {
-        const [y, m, day] = d.split("-").map(Number);
-        return new Date(y, m - 1, day).toLocaleString("default", { month: "short", day: "numeric" });
-      }),
+      labels:  dates.map(dayTick),
       values:  totals,
       current: dates.length - 1,          // today is always the last bucket
       heading: `Daily spending — last ${days} days`,
@@ -443,19 +631,19 @@ function trendBuckets() {
     };
   }
 
-  if (chartRange) {
-    const [y, m] = chartRange.split("-").map(Number);
+  if (activeRange) {
+    const [y, m] = activeRange.split("-").map(Number);
     const inMonth = new Date(y, m, 0).getDate();
     const totals = new Array(inMonth).fill(0);
     valid
-      .filter(p => p.date.startsWith(chartRange))
+      .filter(p => p.date.startsWith(activeRange))
       .forEach(p => {
         const d = parseInt(p.date.slice(8, 10), 10);
         if (d >= 1 && d <= inMonth) totals[d - 1] += parseFloat(p.amount);
       });
 
     const today   = new Date();
-    const isNow   = chartRange === today.toLocaleDateString("en-CA").slice(0, 7);
+    const isNow   = activeRange === today.toLocaleDateString("en-CA").slice(0, 7);
     const heading = new Date(y, m - 1).toLocaleString("default", { month: "long", year: "numeric" });
     return {
       labels:  totals.map((_, i) => String(i + 1)),
@@ -476,10 +664,7 @@ function trendBuckets() {
   const months  = Object.keys(byMonth).sort().slice(-12);
   const thisM   = new Date().toLocaleDateString("en-CA").slice(0, 7);
   return {
-    labels:  months.map(k => {
-      const [y, m] = k.split("-");
-      return new Date(y, m - 1).toLocaleString("default", { month: "short" }) + " " + y.slice(2);
-    }),
+    labels:  months.map(monthTick),
     values:  months.map(k => byMonth[k]),
     current: months.indexOf(thisM),
     heading: "Spending by month",
@@ -578,51 +763,83 @@ function monthsWithData() {
   return [...months].sort().reverse();
 }
 
+// ===== Filter controls =====
+// The same filter row is mounted on Home and on Purchases. One range drives
+// both, so whichever copy you touch, the other follows.
+function mountFilterRows() {
+  const tpl = document.getElementById("filterRowTpl");
+  if (!tpl) return;
+  document.querySelectorAll(".filter-mount").forEach(mount => {
+    if (!mount.firstElementChild) mount.appendChild(tpl.content.cloneNode(true));
+  });
+}
+
+// Push activeRange back out to every copy of the controls.
+function syncRangeControls() {
+  const from = rangeFromDate() || "";
+  // A "from" date is a range in its own right, so the preset dropdown reads
+  // as unset while one is active — one time filter at a time, never two.
+  document.querySelectorAll(".range-select").forEach(s => { s.value = from ? "" : activeRange; });
+  document.querySelectorAll(".range-from").forEach(i => { i.value = from; });
+  document.querySelectorAll(".range-clear").forEach(b => { b.hidden = !from; });
+}
+
+// Setting either control clears the other. Two overlapping time filters
+// would need an intersection rule nobody could predict by looking at them.
+function setRange(value) {
+  activeRange = value;
+  syncRangeControls();
+  renderPurchases();   // redraws the list, footer, hero, bars and chart
+}
+
+document.addEventListener("change", e => {
+  const t = e.target;
+  if (!(t instanceof Element)) return;
+  if (t.matches(".range-select")) setRange(t.value);
+  if (t.matches(".range-from"))   setRange(t.value ? FROM_PREFIX + t.value : "");
+});
+
 let renderedMonths = null;
 
-// Rebuild only when the available months actually change. This runs on every
-// render, and it used to tear down and rebuild the whole <select> each time —
-// with `innerHTML +=` in a loop, so the accumulated string was reparsed once
-// per option.
-function buildMonthOptions() {
-  const select = document.getElementById("chartMonthFilter");
-  if (!select) return;
+// Rebuild the preset options only when the available months actually change.
+// This runs on every render, and it used to tear down and rebuild the whole
+// <select> each time — with `innerHTML +=` in a loop, so the accumulated
+// string was reparsed once per option.
+function buildRangeOptions() {
+  const selects = document.querySelectorAll(".range-select");
+  if (!selects.length) return;
 
   const sorted = monthsWithData();
-  const key    = sorted.join(",");
-  if (key === renderedMonths) return;   // nothing new to show
-  renderedMonths = key;
+  // The mount count is part of the key so a row added later still gets filled.
+  const key    = sorted.join(",") + "|" + selects.length;
+  if (key !== renderedMonths) {
+    renderedMonths = key;
 
-  const current = select.value;
-  const months  = sorted.map(m => {
-    const [y, mo] = m.split("-");
-    const label   = new Date(Number(y), Number(mo) - 1)
-      .toLocaleString("default", { month: "long", year: "numeric" });
-    return `<option value="${m}">${label}</option>`;
-  });
+    // Rolling windows are always offered, even with no data in them — an
+    // empty "last 7 days" is a real answer, not a missing option.
+    const rolling = ROLLING_RANGES
+      .map(r => `<option value="${r.value}">${r.label}</option>`)
+      .join("");
+    const months = sorted
+      .map(m => `<option value="${m}">${monthTitle(m)}</option>`)
+      .join("");
 
-  // Rolling windows are always offered, even with no data in them — an empty
-  // "last 7 days" is a real answer, not a missing option.
-  const rolling = ROLLING_RANGES
-    .map(r => `<option value="${r.value}">${r.label}</option>`)
-    .join("");
+    const html = `<option value="">All time</option>` + rolling + months;
+    selects.forEach(s => { s.innerHTML = html; });
+  }
 
-  select.innerHTML =
-    `<option value="">All time</option>` +
-    rolling +
-    months.join("");
-
-  // Keep the current selection if it's still offered.
-  const stillValid = current === "" || rollingDays(current) || sorted.includes(current);
-  select.value = stillValid ? current : "";
-  chartRange   = select.value;
+  // Drop a month that no longer has anything behind it. Deleting the last
+  // purchase in it would otherwise leave the app filtered to nothing, with a
+  // dropdown offering a month that isn't there any more.
+  if (activeRange && !rangeFromDate() && !rollingDays(activeRange) && !sorted.includes(activeRange)) {
+    activeRange = "";
+  }
+  syncRangeControls();
 }
 
 function updateCategoryBars() {
   const container = document.getElementById("categoryBars");
   if (!container) return;
-
-  buildMonthOptions();
 
   const totals = {};
   let grandTotal = 0;
@@ -1087,20 +1304,15 @@ window.addEventListener("load", async () => {
   const catSelect = document.getElementById("itemCategory");
   if (catSelect) catSelect.insertAdjacentHTML("beforeend", categoryOptionsHtml(""));
 
+  // Put a filter row on every page that declares a mount point. Must happen
+  // before the first render, which fills in their options.
+  mountFilterRows();
+
   // Restore whichever page the URL names, and seed a history entry for it so
   // the first back press has somewhere to go.
   const startPage = location.hash.slice(1) || "home";
   history.replaceState({ page: PAGES.includes(startPage) ? startPage : "home" }, "");
   goPage(startPage, { push: false });
-
-  const monthFilter = document.getElementById("chartMonthFilter");
-  if (monthFilter) {
-    monthFilter.addEventListener("change", () => {
-      chartRange = monthFilter.value;
-      updateCategoryBars();
-      renderTrendChart();
-    });
-  }
 
   try {
     try { await initGapi(); }
