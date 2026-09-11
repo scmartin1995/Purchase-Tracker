@@ -49,7 +49,23 @@ Google Sheet is the durable copy. Each purchase carries a generated `id` and a
   part that isn't generated.
 - **The order of `CATEGORIES` is load-bearing.** `suggestCategory()` takes the
   first keyword match and keywords overlap (`"gas bill"` hits both Utilities
-  and Transportation). Reordering changes what gets auto-detected.
+  and Transportation; `"uber eats"` sits in Dining Out ahead of
+  Transportation's `"uber"`). Reordering changes what gets auto-detected.
+- **Keyword matching is whole-word, not substring.** `matchesKeyword()`
+  normalises both sides — lowercase, apostrophes dropped so `Smith's` becomes
+  `smiths`, everything else non-alphanumeric to spaces — then matches a word
+  sequence. Substring matching used to put "Barnes & Noble" in Dining Out via
+  `bar` and "Las Vegas hotel" in Transportation via `gas`.
+- **Your own picks beat the keyword list.** Choosing a category explicitly, or
+  correcting one in the edit dialog, stores `normalised name → category` in
+  `localStorage` under `learnedCategories`, and `suggestCategory()` checks that
+  first. It deliberately never learns from its own guess, which would make the
+  guess permanent, and never from an edit that left the category untouched. A
+  learned category that has since been removed from `CATEGORIES` is ignored
+  rather than resurrected.
+- **Some merchants are left out of the keyword list on purpose.** Target,
+  Amazon, Home Depot and Lowes are genuinely ambiguous, so guessing at them is
+  worse than falling through to Other and letting the learned list pick them up.
 - **The app is dark, and the palette was re-derived for it.** The category
   colours are not the old light-mode ones dimmed: the previous set was
   validated against a white surface, and moving to a dark one changes both the

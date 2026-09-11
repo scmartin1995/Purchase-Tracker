@@ -26,6 +26,7 @@ const LS_KEY_SHEET_GID = "userSheetGid";
 const LS_KEY_TOKEN     = "gAccessToken";
 const LS_KEY_TOKEN_EXP = "gAccessTokenExp";
 const LS_KEY_WEEKLY_GOAL = "weeklyGoal";
+const LS_KEY_LEARNED     = "learnedCategories";
 
 // Label for a purchase with no category. Deliberately NOT "Other" — that's a
 // category the user can pick on purpose. This one means "we don't know".
@@ -43,6 +44,9 @@ let activeRange = "";
 // device only — it isn't a purchase, so it has no home in the sheet's A:E.
 let weeklyGoal  = loadWeeklyGoal();
 let goalEditing = false;
+
+// Name -> category, built from your own picks. See suggestCategory().
+let learnedCategories = loadLearnedCategories();
 
 let SPREADSHEET_ID = localStorage.getItem(LS_KEY_SHEET_ID)  || null;
 let SHEET_GID      = localStorage.getItem(LS_KEY_SHEET_GID) || null;
@@ -227,28 +231,54 @@ document.addEventListener("click", e => {
 // keywords, and both dropdowns are all derived from this — so adding a
 // category is one edit here, not five scattered ones.
 //
-// ORDER MATTERS. suggestCategory() takes the first match, and keywords
+// ORDER MATTERS. suggestCategory() takes the first match, and keywords still
 // overlap: "gas bill" hits Utilities' "gas bill" and Transportation's "gas",
-// and Utilities wins only by being listed first. Same for "rent payment"
-// (Housing before Debt's "payment"). Reordering this list changes what gets
-// auto-detected — the dropdowns just follow whatever order is here.
+// and Utilities wins only by being listed first. "uber eats" sits in Dining
+// Out ahead of Transportation's "uber" for the same reason. Reordering this
+// list changes what gets auto-detected — the dropdowns just follow it.
+//
+// Matching is whole-word, not substring (see matchesKeyword), so short entries
+// like "bar" and "gas" no longer fire inside "Barnes" or "Las Vegas". Keywords
+// are normalised the same way names are, so punctuation in them is harmless:
+// "chick-fil-a" and "chick fil a" are the same thing here.
+//
+// Deliberately absent: Target, Amazon, Home Depot, Lowes. Each is genuinely
+// ambiguous — Amazon could be any category at all — so guessing at them would
+// be worse than falling through to Other and letting the learned list pick
+// them up from what you actually choose.
 const CATEGORIES = [
   { name: "Groceries",      pill: "pill-groceries",      bar: "--bar-groceries",
-    keywords: ["grocery","market","walmart","costco","smiths","kroger","aldi","whole foods","trader joe","safeway","albertsons"] },
+    keywords: ["grocery","groceries","market","walmart","costco","smiths","harmons","winco","sprouts",
+               "kroger","aldi","whole foods","trader joe","safeway","albertsons","sams club","instacart"] },
   { name: "Dining Out",     pill: "pill-dining",         bar: "--bar-dining",
-    keywords: ["restaurant","grill","cafe","bar","mcdonald","taco","pizza","chipotle","sushi","diner","burrito","burger","kitchen"] },
+    keywords: ["restaurant","grill","cafe","bar","mcdonald","taco","pizza","chipotle","sushi","diner",
+               "burrito","burger","starbucks","dutch bros","swig","crumbl","cafe rio","costa vida",
+               "in n out","chick fil a","wendys","panda express","subway","dominos","papa johns",
+               "panera","dunkin","coffee","lunch","dinner","breakfast","takeout","doordash","grubhub",
+               "uber eats"] },
   { name: "Housing",        pill: "pill-housing",        bar: "--bar-housing",
     keywords: ["rent","mortgage","landlord","hoa","lease"] },
   { name: "Utilities",      pill: "pill-utilities",      bar: "--bar-utilities",
-    keywords: ["power","electric","gas bill","water bill","internet","comcast","xfinity","utility","spectrum","cox"] },
+    keywords: ["power","electric","gas bill","water bill","internet","comcast","xfinity","utility",
+               "utilities","spectrum","cox","dominion","rocky mountain power","trash","sewer",
+               "phone bill","verizon","t mobile"] },
   { name: "Transportation", pill: "pill-transportation", bar: "--bar-transport",
-    keywords: ["uber","lyft","gas","fuel","diesel","bus","train","parking","toll","transit","shell","chevron","texaco"] },
+    keywords: ["uber","lyft","gas","fuel","diesel","bus","train","parking","toll","transit","shell",
+               "chevron","texaco","maverik","sinclair","oil change","car wash","tires","registration",
+               "dmv","frontrunner","trax"] },
   { name: "Entertainment",  pill: "pill-entertainment",  bar: "--bar-entertainment",
-    keywords: ["movie","cinema","netflix","hulu","spotify","concert","game","disney+","ticket","amazon prime","youtube"] },
+    keywords: ["movie","cinema","netflix","hulu","spotify","concert","game","disney","ticket",
+               "amazon prime","youtube","steam","playstation","xbox","nintendo","hbo","paramount",
+               "peacock"] },
   { name: "Health",         pill: "pill-health",         bar: "--bar-health",
-    keywords: ["pharmacy","walgreens","cvs","doctor","clinic","copay","gym","dental","vision","hospital","rx"] },
+    keywords: ["pharmacy","walgreens","cvs","doctor","clinic","copay","gym","dental","dentist",
+               "orthodontist","optometrist","vision","hospital","rx","prescription","urgent care",
+               "instacare","therapy"] },
+  // Bare "payment" was removed: it matched "Payment to Kyle" and anything else
+  // with the word in it. "rent payment" still lands on Housing, by its own
+  // keyword rather than by beating Debt on order.
   { name: "Debt",           pill: "pill-debt",           bar: "--bar-debt",
-    keywords: ["loan","credit card","payment","collections","interest"] },
+    keywords: ["loan","student loan","credit card","card payment","car payment","collections","interest"] },
   // Deliberately last and keyword-free: what suggestCategory() falls back to,
   // and what you pick when nothing else fits.
   { name: "Other",          pill: "pill-other",          bar: "--bar-other", keywords: [] },
@@ -1145,10 +1175,71 @@ function renderCategorySummary() {
 }
 
 // ===== Category guesser =====
-// First match wins, in CATEGORIES order — see the ordering note there.
+
+// Fold a name down to lowercase words. Apostrophes are dropped rather than
+// turned into spaces, so "Smith's" becomes "smiths" and matches the keyword —
+// it used to fall through to Other while the bare "Smiths" matched. Everything
+// else non-alphanumeric becomes a space, which is what makes "Chick-fil-A" and
+// "chick fil a" the same string.
+function normalizeName(name) {
+  return (name || "")
+    .toLowerCase()
+    .replace(/['’]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+// Whole-word match against a normalised name. This is the fix for the old
+// substring behaviour, which put "Barnes & Noble" and "Barber shop" in Dining
+// Out (via "bar") and "Las Vegas hotel" in Transportation (via "gas").
+//
+// Keywords may be several words long ("gas bill"), so this matches a word
+// SEQUENCE. Both sides are normalised first, so the keyword can only contain
+// [a-z0-9 ] by the time it reaches the RegExp and needs no escaping. The
+// optional trailing "s" covers regular plurals like ticket/tickets; irregular
+// ones such as grocery/groceries are listed explicitly instead.
+function matchesKeyword(normalizedName, keyword) {
+  const k = normalizeName(keyword);
+  if (!k) return false;
+  return new RegExp(`(?:^| )${k}s?(?: |$)`).test(normalizedName);
+}
+
+// What you have picked yourself before, keyed by normalised item name.
+// Written only from an explicit choice or a correction — never from a guess,
+// which would let the app cement its own mistakes.
+function loadLearnedCategories() {
+  try {
+    const v = JSON.parse(localStorage.getItem(LS_KEY_LEARNED));
+    return v && typeof v === "object" && !Array.isArray(v) ? v : {};
+  } catch {
+    return {};
+  }
+}
+
+function learnCategory(name, category) {
+  const n = normalizeName(name);
+  if (!n || !category) return;
+  learnedCategories[n] = category;
+  localStorage.setItem(LS_KEY_LEARNED, JSON.stringify(learnedCategories));
+}
+
+function rememberedCategory(normalizedName) {
+  const cat = learnedCategories[normalizedName];
+  if (!cat) return null;
+  // Don't resurrect a category that has since been dropped from CATEGORIES —
+  // "Savings" was removed once already.
+  return CATEGORIES.some(c => c.name === cat) ? cat : null;
+}
+
+// Your own history first, then the keyword list, then Other. The keyword list
+// only has to cover names you have never categorised; anything you have
+// corrected is answered from what you actually chose.
 function suggestCategory(name) {
-  const n = (name || "").toLowerCase();
-  const hit = CATEGORIES.find(c => c.keywords.some(k => n.includes(k)));
+  const n = normalizeName(name);
+  if (!n) return "Other";
+  const learned = rememberedCategory(n);
+  if (learned) return learned;
+  const hit = CATEGORIES.find(c => c.keywords.some(k => matchesKeyword(n, k)));
   return hit ? hit.name : "Other";
 }
 
@@ -1171,6 +1262,9 @@ async function addPurchase() {
 
   const wasAuto = !category;
   if (!category) category = suggestCategory(name);
+  // Only an explicit pick teaches it anything. Learning from its own guess
+  // would just make the guess permanent.
+  else learnCategory(name, category);
 
   const purchase = { id: genId(), name, amount, date, category };
 
@@ -1251,10 +1345,16 @@ function openEditModal(id) {
     if (!newName || !newDate) { alert("Please fill out all fields."); return; }
     if (!Number.isFinite(newAmt) || newAmt <= 0) { alert("Please enter a valid amount."); return; }
 
+    // A category changed in the edit dialog is a correction, and the most
+    // valuable thing to learn from. Saving without touching it teaches
+    // nothing, or opening an auto-categorised entry would confirm the guess.
+    const correctedCategory = newCat && newCat !== p.category;
+
     p.name     = newName;
     p.amount   = newAmt;
     p.date     = newDate;
     p.category = newCat || suggestCategory(newName);
+    if (correctedCategory) learnCategory(newName, p.category);
     saveAndRender();
     overlay.remove();
 
