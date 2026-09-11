@@ -34,6 +34,7 @@ app works fine without signing in.
 | `script.js` | Everything else — state, rendering, Google Sheets sync, the chart |
 | `style.css` | Design tokens and layout. No framework |
 | `service-worker.js` | Offline caching |
+| `scripts/check_contrast.js` | Verifies the palette's contrast ratios and colour separation. Not served to the browser |
 | `manifest.json` | Makes it installable as a PWA |
 
 Data lives in two places at once. `localStorage` is what the UI reads from; a
@@ -49,8 +50,17 @@ Google Sheet is the durable copy. Each purchase carries a generated `id` and a
 - **The order of `CATEGORIES` is load-bearing.** `suggestCategory()` takes the
   first keyword match and keywords overlap (`"gas bill"` hits both Utilities
   and Transportation). Reordering changes what gets auto-detected.
-- **The category colors were validated, not chosen by eye.** There's a note in
-  `style.css` with the command to re-run before changing any of them.
+- **The app is dark, and the palette was re-derived for it.** The category
+  colours are not the old light-mode ones dimmed: the previous set was
+  validated against a white surface, and moving to a dark one changes both the
+  WCAG ratios and the perceived gaps between hues.
+- **The category colours were verified, not chosen by eye.** Run
+  `node scripts/check_contrast.js` after changing any value in the `:root`
+  block; it exits non-zero on a regression. Order still matters, because the
+  separation check compares *adjacent* entries in `CATEGORIES` order.
+  (`style.css` used to point at `scripts/validate_palette.js`, which was never
+  committed. `check_contrast.js` is a simpler replacement and does not
+  reproduce that tool's exact figures.)
 - **`activeRange` in `script.js` is the single source of truth for the time
   filter**, and `inSelectedRange()` is the only definition of "is this purchase
   in it". The purchases list, the footer total, the hero, the category bars and

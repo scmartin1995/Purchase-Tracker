@@ -99,11 +99,20 @@ function saveLocal() {
 // ===== UI helpers =====
 const statusEl = () => document.getElementById("syncStatus");
 
+let toastTimer = null;
+
+// Sync messages are transient now. They used to sit permanently in the entry
+// card; that card is a modal, so they surface as a toast above the action bar
+// and clear themselves. Hidden when empty so it isn't an invisible overlay
+// sitting on top of the content.
 function setSyncStatus(msg, cls = "") {
   const el = statusEl();
   if (!el) return;
-  el.className = "status-pill " + cls;
+  el.className   = "toast " + cls;
   el.textContent = msg;
+  el.hidden      = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.hidden = true; }, 4500);
 }
 
 function showSheetHelper(show) {
@@ -118,6 +127,7 @@ function setMenuOpen(open) {
   if (!m) return;
   m.classList.toggle("open", open);
   m.setAttribute("aria-hidden", open ? "false" : "true");
+  document.getElementById("scrim")?.classList.toggle("open", open);
 }
 
 function toggleMenu() {
@@ -160,6 +170,8 @@ const ACTIONS = {
   "clear-device":  () => clearPurchases(),
   "create-sheet":  () => manualCreateSheet(),
   "clear-range":   () => setRange(""),
+  "open-add":      () => openAddModal(),
+  "close-add":     () => closeAddModal(),
   "edit-goal":     () => { goalEditing = true;  renderWeeklyGoal({ force: true }); },
   "cancel-goal":   () => { goalEditing = false; renderWeeklyGoal({ force: true }); },
   "save-goal":     () => saveGoalFromInput(),
@@ -170,7 +182,37 @@ const ACTIONS = {
 // form, and reaching for the mouse to commit one number is a nuisance.
 document.addEventListener("keydown", e => {
   if (e.key === "Enter" && e.target?.id === "goalInput") saveGoalFromInput();
+  if (e.key === "Escape") {
+    closeAddModal();
+    document.getElementById("editModal")?.remove();
+  }
 });
+
+// ===== Add-entry modal =====
+// The entry form used to occupy the whole first screen, pushing every number
+// below the fold. It now lives behind the action bar's button.
+function openAddModal() {
+  if (document.getElementById("addModal")) return;
+  const tpl = document.getElementById("addEntryTpl");
+  if (!tpl) return;
+  document.body.appendChild(tpl.content.cloneNode(true));
+
+  const dateInput = document.getElementById("itemDate");
+  if (dateInput) dateInput.value = todayStr();
+
+  // Fill the category dropdown from CATEGORIES, keeping the "auto-detect if
+  // blank" option the template already provides.
+  const catSelect = document.getElementById("itemCategory");
+  if (catSelect) catSelect.insertAdjacentHTML("beforeend", categoryOptionsHtml(""));
+
+  const overlay = document.getElementById("addModal");
+  overlay.addEventListener("click", e => { if (e.target === overlay) closeAddModal(); });
+  document.getElementById("itemName")?.focus();
+}
+
+function closeAddModal() {
+  document.getElementById("addModal")?.remove();
+}
 
 document.addEventListener("click", e => {
   const el = e.target.closest("[data-action]");
@@ -370,6 +412,35 @@ function weekSpend() {
     .reduce((s, p) => s + parseFloat(p.amount), 0);
 }
 
+// The week before the current one. The goal above is about this week; last
+// week's total is the number it's most naturally compared against.
+function lastWeekSpend() {
+  const { start } = weekBounds();
+  const [y, m, d] = start.split("-").map(Number);
+  const prev = new Date(y, m - 1, d, 12);
+  prev.setDate(prev.getDate() - 7);
+  const b = weekBounds(prev.toLocaleDateString("en-CA"));
+  return purchases
+    .filter(p => p.date && p.date >= b.start && p.date <= b.end && isValidAmount(p.amount))
+    .reduce((s, p) => s + parseFloat(p.amount), 0);
+}
+
+function renderLastWeekStat() {
+  const valueEl = document.getElementById("lastWeekTotal");
+  const subEl   = document.getElementById("lastWeekSub");
+  if (!valueEl || !subEl) return;
+
+  const total = lastWeekSpend();
+  valueEl.textContent = `$${total.toFixed(2)}`;
+
+  // Only worth comparing when there's a goal, and when last week had anything
+  // in it — "100% under goal" on an empty week is noise, not information.
+  if (weeklyGoal === null || total === 0) { subEl.innerHTML = "&nbsp;"; return; }
+  const diff = total - weeklyGoal;
+  const sign = diff >= 0 ? "+" : "−";
+  subEl.textContent = `${sign}$${Math.abs(diff).toFixed(2)} vs goal`;
+}
+
 // Today through Saturday inclusive, so Sunday reads 7 and Saturday reads 1.
 function daysLeftInWeek() {
   return 7 - new Date().getDay();
@@ -515,6 +586,7 @@ function renderPurchases() {
     : `Total: $${total.toFixed(2)}`;
   updateHero();
   renderWeeklyGoal();
+  renderLastWeekStat();
   updateCategoryBars();
   renderTrendChart();
 }
@@ -1071,13 +1143,9 @@ async function addPurchase() {
 
   const purchase = { id: genId(), name, amount, date, category };
 
-  nameInput.value   = "";
-  amountInput.value = "";
-  dateInput.value   = todayStr();
-  if (categorySelect) categorySelect.value = "";
-
   purchases.push(purchase);
   saveAndRender();
+  closeAddModal();
 
   if (wasAuto) setSyncStatus(`Auto-categorized as "${category}"`, "ok");
 
@@ -1547,14 +1615,6 @@ async function signOutAndClear() {
 
 // ===== Boot =====
 window.addEventListener("load", async () => {
-  const dateInput = document.getElementById("itemDate");
-  if (dateInput) dateInput.value = todayStr();
-
-  // Fill the add form's category dropdown from CATEGORIES, keeping the
-  // "auto-detect if blank" option the markup already provides.
-  const catSelect = document.getElementById("itemCategory");
-  if (catSelect) catSelect.insertAdjacentHTML("beforeend", categoryOptionsHtml(""));
-
   // Put a filter row on every page that declares a mount point. Must happen
   // before the first render, which fills in their options.
   mountFilterRows();
@@ -1564,6 +1624,11 @@ window.addEventListener("load", async () => {
   const startPage = location.hash.slice(1) || "home";
   history.replaceState({ page: PAGES.includes(startPage) ? startPage : "home" }, "");
   goPage(startPage, { push: false });
+
+  // Paint what's already on the device before going near the network.
+  // Everything used to render after the Google scripts were awaited below, so
+  // a slow connection meant staring at an empty app.
+  renderPurchases();
 
   try {
     try { await initGapi(); }
