@@ -105,14 +105,17 @@ let toastTimer = null;
 // card; that card is a modal, so they surface as a toast above the action bar
 // and clear themselves. Hidden when empty so it isn't an invisible overlay
 // sitting on top of the content.
-function setSyncStatus(msg, cls = "") {
+// `sticky` is for messages that report work still in progress. Those must
+// stay put until something replaces them: a progress line that times out
+// while its operation is still running tells the user it finished.
+function setSyncStatus(msg, cls = "", { sticky = false } = {}) {
   const el = statusEl();
   if (!el) return;
   el.className   = "toast " + cls;
   el.textContent = msg;
   el.hidden      = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { el.hidden = true; }, 4500);
+  if (!sticky) toastTimer = setTimeout(() => { el.hidden = true; }, 4500);
 }
 
 function showSheetHelper(show) {
@@ -1391,7 +1394,7 @@ async function manualCreateSheet() {
 // ===== Sheet helpers =====
 async function ensureSheetInitialized(forceCreate = false) {
   if (!SPREADSHEET_ID || forceCreate) {
-    setSyncStatus("Creating your Google Sheet…");
+    setSyncStatus("Creating your Google Sheet…", "", { sticky: true });
     const { id, gid } = await createSpreadsheet();
     SPREADSHEET_ID = id;
     SHEET_GID      = gid;
@@ -1429,7 +1432,7 @@ async function fetchSheetGid() {
 
 async function appendRowToSheet(p) {
   await ensureSheetInitialized();
-  setSyncStatus("Syncing…");
+  setSyncStatus("Syncing…", "", { sticky: true });
   const resp = await gapi.client.sheets.spreadsheets.values.append({
     spreadsheetId: SPREADSHEET_ID,
     range: SHEET_RANGE,
@@ -1669,7 +1672,7 @@ window.addEventListener("load", async () => {
 
   if (gapiReady && loadSavedToken()) {
     updateSignInButton();
-    setSyncStatus("Restoring session…");
+    setSyncStatus("Restoring session…", "", { sticky: true });
     try {
       await ensureSheetInitialized();
       await reconcileLocalWithSheet();
