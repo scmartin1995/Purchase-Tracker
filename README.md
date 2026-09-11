@@ -87,9 +87,15 @@ Google Sheet is the durable copy. Each purchase carries a generated `id` and a
   current Sunday-to-Saturday week. The filter is for looking around; the goal
   answers "how am I doing right now", and a figure that moved when you changed
   the filter would answer neither question.
+- **The goal is a standing value, not a weekly entry.** Set it once and it
+  carries week to week; only "Remove goal" clears it. `weekBounds()` derives
+  the current Sunday-to-Saturday window from the clock on every render, so the
+  spend resets at the rollover while the target stays put. Neither "Clear
+  device" nor "Sign out & clear" touch it — those erase purchases, and the
+  goal isn't one.
 - **The goal lives on the device only.** It isn't a purchase, so it has no home
-  in the sheet's `A:E`, and it doesn't survive a reinstall or "Sign out &
-  clear". It's one number and it's quick to re-enter.
+  in the sheet's `A:E`, and it won't survive a reinstall or clearing site data.
+  It's one number and it's quick to re-enter.
 - **A cached `row` is a hint, never a write address.** Every update and delete
   calls `resolveSheetRow()` first, matching the id in column E. Row numbers are
   positions and positions move: a sheet delete that commits but fails to report

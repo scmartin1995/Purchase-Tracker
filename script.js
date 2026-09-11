@@ -447,8 +447,11 @@ function renderLastWeekStat() {
 }
 
 // Today through Saturday inclusive, so Sunday reads 7 and Saturday reads 1.
+// Derived from the same bounds as everything else rather than reading the
+// clock a second time — one answer to "what day is it", not two that happen
+// to agree.
 function daysLeftInWeek() {
-  return 7 - new Date().getDay();
+  return datesFrom(todayStr(), weekBounds().end).length;
 }
 
 // "Sep 6–12", or "Aug 30 – Sep 5" when the week straddles a month.
