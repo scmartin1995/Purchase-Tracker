@@ -88,7 +88,9 @@ Google Sheet is the durable copy. Each purchase carries a generated `id` and a
   answers "how am I doing right now", and a figure that moved when you changed
   the filter would answer neither question.
 - **The goal is a standing value, not a weekly entry.** Set it once and it
-  carries week to week; only "Remove goal" clears it. `weekBounds()` derives
+  carries week to week. The only thing that clears it is "Remove goal", which
+  sits inside the edit state — tap "Edit goal" to reach it; it is deliberately
+  not on the face of the card. `weekBounds()` derives
   the current Sunday-to-Saturday window from the clock on every render, so the
   spend resets at the rollover while the target stays put. Neither "Clear
   device" nor "Sign out & clear" touch it — those erase purchases, and the
