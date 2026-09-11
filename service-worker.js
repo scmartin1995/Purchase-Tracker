@@ -7,7 +7,12 @@
 //
 // CACHE_NAME still exists to evict old caches on activate, but correctness no
 // longer depends on remembering to change it.
-const CACHE_NAME = "purchases-v4";
+// Bumped for the icon rename: activate deletes every cache that isn't this
+// name, which is what evicts the old icons and the fonts the app no longer
+// uses. Renaming the icons is itself deliberate — Chrome compares manifest
+// FIELDS, not file bytes, so overwriting the old filenames would leave an
+// installed shortcut showing the old art indefinitely.
+const CACHE_NAME = "purchases-v5";
 
 // Same-origin only. A cross-origin URL here would be fatal: cache.addAll()
 // rejects as a whole if any single request fails, so one CDN blip would mean
@@ -18,8 +23,8 @@ const ASSETS = [
   "./style.css",
   "./script.js",
   "./manifest.json",
-  "./icon-192.png",
-  "./icon-512.png"
+  "./icon-receipt-192.png",
+  "./icon-receipt-512.png"
 ];
 
 self.addEventListener("install", event => {

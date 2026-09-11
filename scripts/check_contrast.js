@@ -104,8 +104,9 @@ const CHROME = [
   ['--ink-3 on --surface', '#7f8496', SURFACE, UI_MIN],
   ['--ink-3 on --bg',      '#7f8496', PAGE,    UI_MIN],
   // Text sitting on the gradient hero, at both ends of each gradient.
-  ['hero ink on mint',     '#0a0b10', '#6fe7c8', TEXT_MIN],
-  ['hero ink on lime',     '#0a0b10', '#d8f65e', TEXT_MIN],
+  ['hero ink on teal',     '#0a0b10', '#3fbfa8', TEXT_MIN],
+  ['hero ink on mid-green','#0a0b10', '#4aa87e', TEXT_MIN],
+  ['hero ink on olive',    '#0a0b10', '#6f9e4a', TEXT_MIN],
   ['hero ink on peach',    '#0a0b10', '#ffc07a', TEXT_MIN],
   ['hero ink on pink',     '#0a0b10', '#ff6fa3', TEXT_MIN],
   // Delta chips.

@@ -44,9 +44,9 @@
   --shadow: 0 1px 2px rgba(0,0,0,.6), 0 14px 40px rgba(0,0,0,.45);
 
   /* Hero gradients. The card itself carries the signal, not just the number
-     printed on it: under budget is cool-to-lime, over swaps to a warm ramp.
+     printed on it: under budget is teal-to-green, over swaps to a warm ramp.
      --hero-ink clears 7.5:1 against the darkest stop of either gradient. */
-  --hero-good: linear-gradient(125deg, #6fe7c8 0%, #a9f07c 48%, #d8f65e 100%);
+  --hero-good: linear-gradient(125deg, #3fbfa8 0%, #4aa87e 48%, #6f9e4a 100%);
   --hero-over: linear-gradient(125deg, #ffc07a 0%, #ff8f8a 52%, #ff6fa3 100%);
   --hero-ink:  #0a0b10;
 
@@ -296,7 +296,7 @@ main {
    The weekly goal, full-bleed on the page rather than inside a card. It is
    the question the app exists to answer, so nothing frames it. */
 /* The hero is a single vivid gradient panel, and the gradient IS the signal:
-   cool-to-lime while there's budget left, a warm ramp once there isn't. The
+   teal-to-green while there's budget left, a warm ramp once there isn't. The
    number says "over" in words too, so the colour isn't carrying it alone. */
 .hero {
   margin: 14px;
@@ -976,8 +976,8 @@ input::placeholder { color: var(--ink-3); }
 
 /* ── Keyboard focus ──
    The ring has to read on three different grounds: the near-black page, the
-   dark cards, and the bright gradient hero. One colour cannot do all three —
-   a white ring vanishes on lime — so the surface sets --focus-ring and the
+   dark cards, and the gradient hero. One colour cannot do all three — a white
+   ring vanishes on the gradient — so each surface sets --focus-ring and the
    single rule below picks it up by inheritance. */
 .hero        { --focus-ring: var(--hero-ink); }
 .hero.empty  { --focus-ring: var(--ink); }   /* a plain card again, so back to light */

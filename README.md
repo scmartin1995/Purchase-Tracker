@@ -35,6 +35,7 @@ app works fine without signing in.
 | `style.css` | Design tokens and layout. No framework |
 | `service-worker.js` | Offline caching |
 | `scripts/check_contrast.js` | Verifies the palette's contrast ratios and colour separation. Not served to the browser |
+| `scripts/make_icons.js` | Renders the app icon to PNG at any size, no dependencies. Not served to the browser |
 | `manifest.json` | Makes it installable as a PWA |
 
 Data lives in two places at once. `localStorage` is what the UI reads from; a
@@ -86,6 +87,14 @@ Google Sheet is the durable copy. Each purchase carries a generated `id` and a
 - **One time filter at a time.** The preset dropdown and the From date clear
   each other. Two overlapping ranges would need an intersection rule nobody
   could predict from looking at the controls.
+- **Renaming an icon is how you make it actually update.** Chrome compares
+  manifest *fields*, not file bytes, so overwriting an icon at the same path
+  can leave an installed shortcut showing the old art indefinitely — and the
+  service worker caches icons cache-first, so the old bytes keep being served
+  too. Give new art new filenames, update the precache list in the same commit
+  (`cache.addAll()` is all-or-nothing, so a stale entry silently breaks the
+  whole precache), and bump `CACHE_NAME` to evict the old ones. Even then, the
+  only certain fix on a phone is removing and re-adding the shortcut.
 - **The service worker is network-first for HTML/JS/CSS**, so deploys land
   without bumping `CACHE_NAME` by hand. It caches **same-origin responses
   only**, so on a cold offline first load the CDN font and Chart.js are both
