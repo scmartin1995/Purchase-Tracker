@@ -32,6 +32,10 @@
   --rule:      #272a36;
   --rule-2:    #1f2230;
 
+  /* Keyboard focus ring. Overridden per surface below — see the rule near
+     the end of this file. */
+  --focus-ring: #f7f8fa;
+
   --radius:      20px;
   --radius-sm:   12px;
   --radius-lg:   26px;
@@ -124,22 +128,28 @@ body { display: flex; flex-direction: column; overflow: hidden; }
 .mono { font-variant-numeric: tabular-nums; }
 
 /* ── App bar ── */
+/* Three columns, not space-between. The sign-in button is display:none once
+   you are signed in, and with space-between that shoved the title to the
+   right edge — a layout that only appeared for signed-in users. The outer
+   columns hold their width whether or not anything is in them. */
 .appbar {
   background: var(--chrome);
   color: var(--ink);
   border-bottom: 1px solid var(--rule);
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-between;
   padding: 12px 16px;
   flex-shrink: 0;
   z-index: 10;
 }
+.appbar > :last-child { justify-self: end; }
 
 .appbar-logo {
   font-weight: 700;
   font-size: 17px;
   letter-spacing: -0.02em;
+  text-align: center;
 }
 
 .menu-logo { color: var(--ink); }
@@ -481,6 +491,10 @@ input, select {
   transition: border-color .15s;
   appearance: none;
 }
+/* Pointer focus keeps the quiet border-only treatment; keyboard focus gets a
+   real ring, added back by the :focus-visible rules at the end of the file.
+   The higher-specificity selector there is deliberate — `input:focus` would
+   otherwise win and keep the outline suppressed. */
 input:focus, select:focus {
   outline: none;
   border-color: var(--ink);
@@ -940,6 +954,26 @@ input::placeholder { color: var(--ink-3); }
 .fab .material-symbols-outlined { font-size: 18px; }
 .fab:hover  { opacity: .88; }
 .fab:active { transform: scale(.97); }
+
+/* ── Keyboard focus ──
+   The ring has to read on three different grounds: the near-black page, the
+   dark cards, and the bright gradient hero. One colour cannot do all three —
+   a white ring vanishes on lime — so the surface sets --focus-ring and the
+   single rule below picks it up by inheritance. */
+.hero        { --focus-ring: var(--hero-ink); }
+.hero.empty  { --focus-ring: var(--ink); }   /* a plain card again, so back to light */
+
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+/* Beats `input:focus { outline: none }` above, which is scoped to pointer
+   focus but is specific enough to win against a bare :focus-visible. */
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
 
 /* ── Large screen centering ── */
 @media (min-width: 700px) {

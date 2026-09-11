@@ -71,7 +71,16 @@ Google Sheet is the durable copy. Each purchase carries a generated `id` and a
   each other. Two overlapping ranges would need an intersection rule nobody
   could predict from looking at the controls.
 - **The service worker is network-first for HTML/JS/CSS**, so deploys land
-  without bumping `CACHE_NAME` by hand.
+  without bumping `CACHE_NAME` by hand. It caches **same-origin responses
+  only**, so on a cold offline first load the CDN font and Chart.js are both
+  missing: type falls back to `system-ui` and the trend card hides itself.
+  The app itself still renders in full from cache.
+- **The keyboard focus ring is set per surface, not globally.** A single
+  colour cannot work on both the near-black page and the bright gradient hero,
+  so each surface sets `--focus-ring` and one `:focus-visible` rule reads it by
+  inheritance. Note `input:focus { outline: none }` is scoped to pointer focus
+  and is specific enough to beat a bare `:focus-visible`, which is why there is
+  a matching `input:focus-visible` rule.
 - **Anything the sheet doesn't have goes up on the next sign-in.**
   `pushUnsyncedPurchases()` appends every purchase still without a `row` once
   `reconcileLocalWithSheet()` has matched what it can, in one batched call.
