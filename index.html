@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- interactive-widget=resizes-content: when the on-screen keyboard opens,
+       shrink the LAYOUT viewport, not just the visual one. Chrome's default
+       (resizes-visual) leaves `position: fixed; inset: 0` covering the whole
+       screen, so a centred modal keeps half of itself behind the keyboard. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content" />
   <title>Purchases</title>
   <link rel="manifest" href="manifest.json" />
   <meta name="theme-color" content="#0e0e0d" />

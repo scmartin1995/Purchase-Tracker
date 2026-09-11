@@ -865,6 +865,10 @@ input::placeholder { color: var(--ink-3); }
   justify-content: center;
   z-index: 300;
   padding: 20px;
+  /* The box must always be reachable, even when it is taller than the room
+     left for it. */
+  overflow-y: auto;
+  overscroll-behavior: contain;   /* don't drag the page behind it */
 }
 .modal-box {
   background: var(--surface);
@@ -873,9 +877,24 @@ input::placeholder { color: var(--ink-3); }
   padding: 22px;
   width: 100%;
   max-width: 460px;
+  max-height: 100%;
+  overflow-y: auto;
   box-shadow: var(--shadow);
 }
 .modal-box .card-label { margin-bottom: 16px; }
+
+/* A short viewport is almost always an open keyboard. Centring a box in the
+   little room that is left puts its lower half off-screen, so anchor to the
+   top and let the overlay scroll.
+
+   This is the fallback for browsers that ignore interactive-widget (Safari,
+   older Chrome). Where it IS honoured the overlay has already shrunk to the
+   space above the keyboard, and this just tightens the spacing. */
+@media (max-height: 620px) {
+  .modal-bg  { align-items: flex-start; padding: 10px; }
+  .modal-box { padding: 16px; }
+  .modal-box .card-label { margin-bottom: 10px; }
+}
 
 /* ── Category table ── */
 .cat-table {
