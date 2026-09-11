@@ -2,8 +2,8 @@
 //
 // Renders the app icon to PNG at any size, with no dependencies.
 //
-// The icon is a receipt on the app's mint-to-lime gradient — the same gradient
-// the weekly-goal hero uses, so the icon and the app agree. The receipt body is
+// The icon is a receipt on the app's teal-to-green gradient — the same ramp the
+// weekly-goal hero uses, so the icon and the app agree. The receipt body is
 // a lifted dark surface rather than a hole punched through to the background:
 // cut-outs were tried first and collapsed into a dark blob below ~56px, because
 // the cut lines were the same gradient as the surround and merged with it.
@@ -26,10 +26,13 @@ const SIZES = [192, 512];
 const OUT = (size) => path.join(__dirname, "..", `icon-receipt-${size}.png`);
 
 // ── palette ───────────────────────────────────────────────────────────────
+// Deliberately deeper than a lime ramp. The first pass was bright lime, which
+// read as an energy drink rather than a finance app once it was sitting on a
+// home screen at 34px. Must stay in step with --hero-good in style.css.
 const GRADIENT = [
-  [0.00, [0x6f, 0xe7, 0xc8]],
-  [0.48, [0xa9, 0xf0, 0x7c]],
-  [1.00, [0xd8, 0xf6, 0x5e]],
+  [0.00, [0x3f, 0xbf, 0xa8]],
+  [0.48, [0x4a, 0xa8, 0x7e]],
+  [1.00, [0x6f, 0x9e, 0x4a]],
 ];
 const BODY = [0x17, 0x1a, 0x24];   // receipt surface, --surface nudged
 const LINE = [0x9a, 0xa0, 0xae];   // mid grey
