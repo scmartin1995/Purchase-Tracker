@@ -25,6 +25,7 @@ const LS_KEY_SHEET_ID  = "userSheetId";
 const LS_KEY_SHEET_GID = "userSheetGid";
 const LS_KEY_TOKEN     = "gAccessToken";
 const LS_KEY_TOKEN_EXP = "gAccessTokenExp";
+const LS_KEY_WEEKLY_GOAL = "weeklyGoal";
 
 // Label for a purchase with no category. Deliberately NOT "Other" — that's a
 // category the user can pick on purpose. This one means "we don't know".
@@ -37,6 +38,11 @@ let gapiReady   = false;
 // total, the hero total, the category bars and the trend chart. See RANGE
 // VALUES below for the forms it takes.
 let activeRange = "";
+
+// The standing weekly spending target, or null when none is set. Lives on the
+// device only — it isn't a purchase, so it has no home in the sheet's A:E.
+let weeklyGoal  = loadWeeklyGoal();
+let goalEditing = false;
 
 let SPREADSHEET_ID = localStorage.getItem(LS_KEY_SHEET_ID)  || null;
 let SHEET_GID      = localStorage.getItem(LS_KEY_SHEET_GID) || null;
@@ -93,11 +99,23 @@ function saveLocal() {
 // ===== UI helpers =====
 const statusEl = () => document.getElementById("syncStatus");
 
-function setSyncStatus(msg, cls = "") {
+let toastTimer = null;
+
+// Sync messages are transient now. They used to sit permanently in the entry
+// card; that card is a modal, so they surface as a toast above the action bar
+// and clear themselves. Hidden when empty so it isn't an invisible overlay
+// sitting on top of the content.
+// `sticky` is for messages that report work still in progress. Those must
+// stay put until something replaces them: a progress line that times out
+// while its operation is still running tells the user it finished.
+function setSyncStatus(msg, cls = "", { sticky = false } = {}) {
   const el = statusEl();
   if (!el) return;
-  el.className = "status-pill " + cls;
+  el.className   = "toast " + cls;
   el.textContent = msg;
+  el.hidden      = false;
+  clearTimeout(toastTimer);
+  if (!sticky) toastTimer = setTimeout(() => { el.hidden = true; }, 4500);
 }
 
 function showSheetHelper(show) {
@@ -112,6 +130,7 @@ function setMenuOpen(open) {
   if (!m) return;
   m.classList.toggle("open", open);
   m.setAttribute("aria-hidden", open ? "false" : "true");
+  document.getElementById("scrim")?.classList.toggle("open", open);
 }
 
 function toggleMenu() {
@@ -154,7 +173,49 @@ const ACTIONS = {
   "clear-device":  () => clearPurchases(),
   "create-sheet":  () => manualCreateSheet(),
   "clear-range":   () => setRange(""),
+  "open-add":      () => openAddModal(),
+  "close-add":     () => closeAddModal(),
+  "edit-goal":     () => { goalEditing = true;  renderWeeklyGoal({ force: true }); },
+  "cancel-goal":   () => { goalEditing = false; renderWeeklyGoal({ force: true }); },
+  "save-goal":     () => saveGoalFromInput(),
+  "remove-goal":   () => { saveWeeklyGoal(null); goalEditing = false; renderWeeklyGoal({ force: true }); },
 };
+
+// The goal input submits on Enter as well as on the button — it's a one-field
+// form, and reaching for the mouse to commit one number is a nuisance.
+document.addEventListener("keydown", e => {
+  if (e.key === "Enter" && e.target?.id === "goalInput") saveGoalFromInput();
+  if (e.key === "Escape") {
+    closeAddModal();
+    document.getElementById("editModal")?.remove();
+  }
+});
+
+// ===== Add-entry modal =====
+// The entry form used to occupy the whole first screen, pushing every number
+// below the fold. It now lives behind the action bar's button.
+function openAddModal() {
+  if (document.getElementById("addModal")) return;
+  const tpl = document.getElementById("addEntryTpl");
+  if (!tpl) return;
+  document.body.appendChild(tpl.content.cloneNode(true));
+
+  const dateInput = document.getElementById("itemDate");
+  if (dateInput) dateInput.value = todayStr();
+
+  // Fill the category dropdown from CATEGORIES, keeping the "auto-detect if
+  // blank" option the template already provides.
+  const catSelect = document.getElementById("itemCategory");
+  if (catSelect) catSelect.insertAdjacentHTML("beforeend", categoryOptionsHtml(""));
+
+  const overlay = document.getElementById("addModal");
+  overlay.addEventListener("click", e => { if (e.target === overlay) closeAddModal(); });
+  document.getElementById("itemName")?.focus();
+}
+
+function closeAddModal() {
+  document.getElementById("addModal")?.remove();
+}
 
 document.addEventListener("click", e => {
   const el = e.target.closest("[data-action]");
@@ -298,9 +359,12 @@ function updateHero() {
       const diff = total - prev;
       const pct  = Math.abs((diff / prev) * 100).toFixed(0);
       const sign = diff >= 0 ? "+" : "−";
-      subEl.textContent = `${sign}$${Math.abs(diff).toFixed(2)} (${sign}${pct}%) vs last month`;
+      // Spending more than last month is the bad direction, whatever the sign.
+      subEl.innerHTML =
+        `<span class="chip ${diff > 0 ? "bad" : "good"}">${sign}${pct}%</span>` +
+        `<span class="stat-cap">vs last month</span>`;
     } else {
-      subEl.textContent = "\u00a0";
+      subEl.innerHTML = "&nbsp;";
     }
     return;
   }
@@ -311,6 +375,161 @@ function updateHero() {
   labelEl.textContent  = rangeTitle();
   amountEl.textContent = `$${total.toFixed(2)}`;
   subEl.textContent    = count === 1 ? "1 purchase" : `${count} purchases`;
+}
+
+// ===== Weekly goal =====
+// A standing weekly target, measured over the current Sunday-to-Saturday week.
+//
+// This is the one number on the page that ignores the filter row. The filter
+// is for looking around — "what did August cost me" — and this answers "how
+// am I doing right now". A figure that moved when you changed the filter
+// would answer neither question.
+
+function loadWeeklyGoal() {
+  const n = parseFloat(localStorage.getItem(LS_KEY_WEEKLY_GOAL));
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function saveWeeklyGoal(value) {
+  if (value === null) localStorage.removeItem(LS_KEY_WEEKLY_GOAL);
+  else localStorage.setItem(LS_KEY_WEEKLY_GOAL, String(value));
+  weeklyGoal = value;
+}
+
+// Sunday through Saturday around the given day, as YYYY-MM-DD. Built by
+// stepping a local Date set to midday, so a DST change can't shift the
+// boundary onto the wrong calendar day.
+function weekBounds(today = todayStr()) {
+  const [y, m, d] = today.split("-").map(Number);
+  const start = new Date(y, m - 1, d, 12);
+  start.setDate(start.getDate() - start.getDay());   // getDay(): 0 is Sunday
+  const end = new Date(start);
+  end.setDate(end.getDate() + 6);
+  return {
+    start: start.toLocaleDateString("en-CA"),
+    end:   end.toLocaleDateString("en-CA"),
+  };
+}
+
+function weekSpend() {
+  const { start, end } = weekBounds();
+  return purchases
+    .filter(p => p.date && p.date >= start && p.date <= end && isValidAmount(p.amount))
+    .reduce((s, p) => s + parseFloat(p.amount), 0);
+}
+
+// The week before the current one. The goal above is about this week; last
+// week's total is the number it's most naturally compared against.
+function lastWeekSpend() {
+  const { start } = weekBounds();
+  const [y, m, d] = start.split("-").map(Number);
+  const prev = new Date(y, m - 1, d, 12);
+  prev.setDate(prev.getDate() - 7);
+  const b = weekBounds(prev.toLocaleDateString("en-CA"));
+  return purchases
+    .filter(p => p.date && p.date >= b.start && p.date <= b.end && isValidAmount(p.amount))
+    .reduce((s, p) => s + parseFloat(p.amount), 0);
+}
+
+function renderLastWeekStat() {
+  const valueEl = document.getElementById("lastWeekTotal");
+  const subEl   = document.getElementById("lastWeekSub");
+  if (!valueEl || !subEl) return;
+
+  const total = lastWeekSpend();
+  valueEl.textContent = `$${total.toFixed(2)}`;
+
+  // Only worth comparing when there's a goal, and when last week had anything
+  // in it — "100% under goal" on an empty week is noise, not information.
+  if (weeklyGoal === null || total === 0) { subEl.innerHTML = "&nbsp;"; return; }
+  const diff = total - weeklyGoal;
+  const sign = diff >= 0 ? "+" : "−";
+  subEl.innerHTML =
+    `<span class="chip ${diff > 0 ? "bad" : "good"}">${sign}$${Math.abs(diff).toFixed(2)}</span>` +
+    `<span class="stat-cap">vs goal</span>`;
+}
+
+// Today through Saturday inclusive, so Sunday reads 7 and Saturday reads 1.
+// Derived from the same bounds as everything else rather than reading the
+// clock a second time — one answer to "what day is it", not two that happen
+// to agree.
+function daysLeftInWeek() {
+  return datesFrom(todayStr(), weekBounds().end).length;
+}
+
+// "Sep 6–12", or "Aug 30 – Sep 5" when the week straddles a month.
+function weekRangeLabel({ start, end }) {
+  const [, sm, sd] = start.split("-").map(Number);
+  const [, em, ed] = end.split("-").map(Number);
+  const mon = n => new Date(2000, n - 1).toLocaleString("default", { month: "short" });
+  return sm === em ? `${mon(sm)} ${sd}–${ed}` : `${mon(sm)} ${sd} – ${mon(em)} ${ed}`;
+}
+
+function saveGoalFromInput() {
+  const input = document.getElementById("goalInput");
+  if (!input) return;
+  const value = parseFloat(input.value);
+  if (!Number.isFinite(value) || value <= 0) { alert("Enter a weekly goal above $0."); return; }
+  saveWeeklyGoal(value);
+  goalEditing = false;
+  renderWeeklyGoal({ force: true });
+}
+
+function renderWeeklyGoal({ force = false } = {}) {
+  const body = document.getElementById("goalBody");
+  if (!body) return;
+  // A render can fire from anywhere — adding a purchase, changing the filter.
+  // Don't tear the input out from under someone mid-type.
+  if (goalEditing && !force) return;
+
+  const range   = weekRangeLabel(weekBounds());
+  const editing = goalEditing || weeklyGoal === null;
+  const spent   = weekSpend();
+  const over    = !editing && weeklyGoal - spent < 0;
+
+  // The panel's own colour carries the state, so it has to know it: a bright
+  // gradient behind an empty form is noise, and behind an overspend it's wrong.
+  const hero = document.getElementById("goalHero");
+  if (hero) {
+    hero.classList.toggle("empty", editing);
+    hero.classList.toggle("over",  over);
+  }
+
+  if (editing) {
+    const isFirst = weeklyGoal === null;
+    body.innerHTML = `
+      <div class="goal-form">
+        <label class="sr-only" for="goalInput">Weekly spending goal</label>
+        <input id="goalInput" type="number" step="0.01" min="0" inputmode="decimal"
+               class="mono" placeholder="$0.00" value="${isFirst ? "" : weeklyGoal}" />
+        <button class="btn-primary" data-action="save-goal">${isFirst ? "Set goal" : "Save"}</button>
+        ${isFirst ? "" : `<button class="btn-ghost" data-action="cancel-goal">Cancel</button>`}
+      </div>
+      ${isFirst
+        ? `<p class="subtle goal-hint">Set a target and this shows what's left of it. This week is ${range}.</p>`
+        : `<button class="link-btn link-danger" data-action="remove-goal">Remove goal</button>`}
+    `;
+    document.getElementById("goalInput")?.focus();
+    return;
+  }
+
+  const left = weeklyGoal - spent;
+  const pct  = Math.min(100, (spent / weeklyGoal) * 100);
+  const days = daysLeftInWeek();
+
+  body.innerHTML = `
+    <div class="goal-amount${over ? " over" : ""}">
+      $${Math.abs(left).toFixed(2)}<span class="goal-unit">${over ? "over" : "left"}</span>
+    </div>
+    <div class="goal-track">
+      <div class="goal-fill${over ? " over" : ""}" style="width:${pct.toFixed(1)}%"></div>
+    </div>
+    <div class="goal-meta">
+      <span>$${spent.toFixed(2)} of $${weeklyGoal.toFixed(2)}</span>
+      <span>${range} · ${days} day${days === 1 ? "" : "s"} left</span>
+    </div>
+    <button class="link-btn" data-action="edit-goal">Edit goal</button>
+  `;
 }
 
 // ===== Rendering =====
@@ -386,6 +605,8 @@ function renderPurchases() {
     ? `Total (${rangeTitle()}): $${total.toFixed(2)}`
     : `Total: $${total.toFixed(2)}`;
   updateHero();
+  renderWeeklyGoal();
+  renderLastWeekStat();
   updateCategoryBars();
   renderTrendChart();
 }
@@ -691,10 +912,13 @@ function renderTrendChart() {
   document.getElementById("trendLabel").textContent = heading;
   document.getElementById("trendNote").textContent  = note;
 
-  const accent  = cssVar("--ink")   || "#1a1a18";
-  const context = cssVar("--ink-3") || "#aaa89f";
-  const rule    = cssVar("--rule-2") || "#f0ede8";
-  const ink2    = cssVar("--ink-2") || "#6a6860";
+  const accent  = cssVar("--chart-bar-now") || "#b79ef0";
+  const context = cssVar("--chart-bar")     || "#4e4a6b";
+  const rule    = cssVar("--rule-2")        || "#1f2230";
+  const ink2    = cssVar("--ink-2")         || "#a9adbd";
+  const ink     = cssVar("--ink")           || "#f7f8fa";
+  const panel   = cssVar("--surface-2")     || "#1e212c";
+  const font    = "'Plus Jakarta Sans', system-ui, sans-serif";
 
   trendChart?.destroy();
   trendChart = new Chart(canvas.getContext("2d"), {
@@ -705,9 +929,9 @@ function renderTrendChart() {
         data: values,
         backgroundColor: values.map((_, i) => i === current ? accent : context),
         // Rounded at the data end, square on the baseline.
-        borderRadius: { topLeft: 4, topRight: 4, bottomLeft: 0, bottomRight: 0 },
+        borderRadius: { topLeft: 8, topRight: 8, bottomLeft: 0, bottomRight: 0 },
         borderSkipped: false,
-        maxBarThickness: 24,
+        maxBarThickness: 34,
       }],
     },
     options: {
@@ -717,11 +941,19 @@ function renderTrendChart() {
       plugins: {
         legend: { display: false },   // one series — the card label names it
         tooltip: {
-          backgroundColor: accent,
+          // A dark panel with light text. The bar colour can't be reused as
+          // the tooltip background any more: it is light now, and Chart.js
+          // defaults its text to white, which would be invisible on it.
+          backgroundColor: panel,
+          borderColor: cssVar("--rule") || "#272a36",
+          borderWidth: 1,
+          titleColor: ink2,
+          bodyColor:  ink,
+          cornerRadius: 10,
           padding: 10,
           displayColors: false,
-          titleFont: { family: "'IBM Plex Mono', monospace", size: 11 },
-          bodyFont:  { family: "'IBM Plex Mono', monospace", size: 12 },
+          titleFont: { family: font, size: 11, weight: "500" },
+          bodyFont:  { family: font, size: 13, weight: "600" },
           callbacks: {
             title: items => unit === "day" ? `Day ${items[0].label}` : items[0].label,
             label: item => `$${item.parsed.y.toFixed(2)}`,
@@ -734,7 +966,7 @@ function renderTrendChart() {
           border: { color: rule },
           ticks:  {
             color: ink2,
-            font: { family: "'IBM Plex Mono', monospace", size: 10 },
+            font: { family: font, size: 11, weight: "500" },
             maxRotation: 0,
             autoSkipPadding: 12,
           },
@@ -745,7 +977,7 @@ function renderTrendChart() {
           border: { display: false },
           ticks:  {
             color: ink2,
-            font: { family: "'IBM Plex Mono', monospace", size: 10 },
+            font: { family: font, size: 11, weight: "500" },
             padding: 8,
             maxTicksLimit: 5,
             callback: v => "$" + (v >= 1000 ? (v / 1000) + "k" : v),
@@ -942,13 +1174,9 @@ async function addPurchase() {
 
   const purchase = { id: genId(), name, amount, date, category };
 
-  nameInput.value   = "";
-  amountInput.value = "";
-  dateInput.value   = todayStr();
-  if (categorySelect) categorySelect.value = "";
-
   purchases.push(purchase);
   saveAndRender();
+  closeAddModal();
 
   if (wasAuto) setSyncStatus(`Auto-categorized as "${category}"`, "ok");
 
@@ -1166,7 +1394,7 @@ async function manualCreateSheet() {
 // ===== Sheet helpers =====
 async function ensureSheetInitialized(forceCreate = false) {
   if (!SPREADSHEET_ID || forceCreate) {
-    setSyncStatus("Creating your Google Sheet…");
+    setSyncStatus("Creating your Google Sheet…", "", { sticky: true });
     const { id, gid } = await createSpreadsheet();
     SPREADSHEET_ID = id;
     SHEET_GID      = gid;
@@ -1204,7 +1432,7 @@ async function fetchSheetGid() {
 
 async function appendRowToSheet(p) {
   await ensureSheetInitialized();
-  setSyncStatus("Syncing…");
+  setSyncStatus("Syncing…", "", { sticky: true });
   const resp = await gapi.client.sheets.spreadsheets.values.append({
     spreadsheetId: SPREADSHEET_ID,
     range: SHEET_RANGE,
@@ -1418,14 +1646,6 @@ async function signOutAndClear() {
 
 // ===== Boot =====
 window.addEventListener("load", async () => {
-  const dateInput = document.getElementById("itemDate");
-  if (dateInput) dateInput.value = todayStr();
-
-  // Fill the add form's category dropdown from CATEGORIES, keeping the
-  // "auto-detect if blank" option the markup already provides.
-  const catSelect = document.getElementById("itemCategory");
-  if (catSelect) catSelect.insertAdjacentHTML("beforeend", categoryOptionsHtml(""));
-
   // Put a filter row on every page that declares a mount point. Must happen
   // before the first render, which fills in their options.
   mountFilterRows();
@@ -1435,6 +1655,11 @@ window.addEventListener("load", async () => {
   const startPage = location.hash.slice(1) || "home";
   history.replaceState({ page: PAGES.includes(startPage) ? startPage : "home" }, "");
   goPage(startPage, { push: false });
+
+  // Paint what's already on the device before going near the network.
+  // Everything used to render after the Google scripts were awaited below, so
+  // a slow connection meant staring at an empty app.
+  renderPurchases();
 
   try {
     try { await initGapi(); }
@@ -1447,7 +1672,7 @@ window.addEventListener("load", async () => {
 
   if (gapiReady && loadSavedToken()) {
     updateSignInButton();
-    setSyncStatus("Restoring session…");
+    setSyncStatus("Restoring session…", "", { sticky: true });
     try {
       await ensureSheetInitialized();
       await reconcileLocalWithSheet();

@@ -1,63 +1,91 @@
-/* ── Tokens ── */
+/* ── Tokens ──
+   Dark and high-contrast. Every ratio quoted below is produced by
+   `node scripts/check_contrast.js`, which is committed next to this file.
+   Re-run it after changing any value here — it exits non-zero on a regression.
+
+   The category colours were re-derived for a dark surface (the set before them
+   was validated against white, where both the WCAG ratios and the perceived
+   gaps between hues are different) and re-checked when the surface moved from
+   warm black to this blue-black.
+
+   Worst adjacent separation: ΔE 24.4 for normal vision, ΔE 20.6 under the
+   worst of protanopia / deuteranopia / tritanopia. Every pill's text clears
+   6.5:1 on its own chip, and every bar clears 3:1 against the card.
+
+   Order is load-bearing: the separation check compares ADJACENT entries in
+   CATEGORIES order, so reordering CATEGORIES means re-running the checker. */
 :root {
-  --bg:       #fafaf8;
-  --surface:  #ffffff;
-  --ink:      #1a1a18;
-  --ink-2:    #6a6860;
-  --ink-3:    #aaa89f;
-  --rule:     #e8e5e0;
-  --rule-2:   #f0ede8;
-  --accent:   #1a1a18;
-  --radius:   10px;
-  --radius-sm: 6px;
+  /* One typeface throughout. Numbers use tabular figures rather than a
+     separate monospace, which is what `.mono` now means. */
+  --font: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
 
-  /* ── Category colors ──
-     Validated 2026-08-30 with the dataviz palette validator, not chosen by eye.
-     The previous set failed: Entertainment and Transportation were ΔE 2.5 apart
-     under deuteranopia (target ≥8) — the same color to ~6% of men — and Health
-     and Entertainment were ΔE 8.6 apart for NORMAL vision (floor 15).
-     This set: worst adjacent CVD 8.4, worst adjacent normal-vision 18.7.
+  --bg:        #0a0b10;   /* the page              */
+  --surface:   #151720;   /* cards                 */
+  --surface-2: #1e212c;   /* tracks, wells, toasts */
+  --chrome:    #0d0f16;   /* app bar and drawer    */
 
-     Housing and Other/Uncategorized are deliberate NEUTRALS, not hues — they
-     fail the chroma floor on purpose. Housing anchors the palette in the app's
-     ink; Other/Uncategorized are catch-alls, not peer categories. That keeps
-     the real hue count at seven, inside the ~8 ceiling a palette can carry.
+  --ink:       #f7f8fa;   /* 18.50:1 on --bg       */
+  --ink-2:     #a9adbd;   /*  8.00:1 on --surface  */
+  --ink-3:     #7f8496;   /*  4.80:1 on --surface  */
+  --accent:    #f7f8fa;
 
-     Re-run before changing any value (order is the safety mechanism, so
-     reordering counts as changing it):
-       node scripts/validate_palette.js "<hexes in CATEGORIES order>" \
-            --mode light --surface "#ffffff"
+  --rule:      #272a36;
+  --rule-2:    #1f2230;
 
-     Pill text/bg pairs are all ≥4.5:1 against each other. */
+  /* Keyboard focus ring. Overridden per surface below — see the rule near
+     the end of this file. */
+  --focus-ring: #f7f8fa;
 
-  /* Category colors — pill text, pill bg */
-  --c-groceries:     #137b55; --cb-groceries:     #e4f5ef;
-  --c-dining:        #b04e27; --cb-dining:        #fdede7;
-  --c-housing:       #1a1a18; --cb-housing:       #e4e4e3;
-  --c-utilities:     #266cc1; --cb-utilities:     #e5effa;
-  --c-transport:     #007c00; --cb-transport:     #e0f0e0;
-  --c-entertainment: #a25673; --cb-entertainment: #fceff4;
-  --c-health:        #4a3aa7; --cb-health:        #e9e7f4;
-  --c-debt:          #b63a3a; --cb-debt:          #fce9e9;
-  --c-other:         #6e6d66; --cb-other:         #f1f1f0;
-  --c-uncategorized: #6e6d68; --cb-uncategorized: #f6f6f5;
+  --radius:      20px;
+  --radius-sm:   12px;
+  --radius-lg:   26px;
+  --radius-pill: 999px;
 
-  /* Category bar accents — listed in CATEGORIES order, which is the order the
-     validator checked. Aqua and magenta sit below 3:1 on white; every bar
-     carries a visible name and value, and the Categories page is a table view,
-     which is the required relief. */
-  --bar-groceries:     #1baf7a;   /* aqua    */
-  --bar-dining:        #eb6834;   /* orange  */
-  --bar-housing:       #1a1a18;   /* neutral */
-  --bar-utilities:     #2a78d6;   /* blue    */
-  --bar-transport:     #008300;   /* green   */
-  --bar-entertainment: #e87ba4;   /* magenta */
-  --bar-health:        #4a3aa7;   /* violet  */
-  --bar-debt:          #e34948;   /* red     */
-  --bar-other:         #8a8880;   /* neutral */
-  --bar-uncategorized: #b8b6ae;   /* neutral */
+  --shadow: 0 1px 2px rgba(0,0,0,.6), 0 14px 40px rgba(0,0,0,.45);
+
+  /* Hero gradients. The card itself carries the signal, not just the number
+     printed on it: under budget is cool-to-lime, over swaps to a warm ramp.
+     --hero-ink clears 7.5:1 against the darkest stop of either gradient. */
+  --hero-good: linear-gradient(125deg, #6fe7c8 0%, #a9f07c 48%, #d8f65e 100%);
+  --hero-over: linear-gradient(125deg, #ffc07a 0%, #ff8f8a 52%, #ff6fa3 100%);
+  --hero-ink:  #0a0b10;
+
+  /* Trend chart. One measure over time, so one hue: the period in progress is
+     picked out and the finished ones recede. */
+  --chart-bar:      #4e4a6b;
+  --chart-bar-now:  #b79ef0;
+
+  /* Delta chips and status */
+  --ok:     #c8f560;  --ok-bg:  #23300f;   /* 11.12:1 */
+  --err:    #ff8f8a;  --err-bg: #3a1a1e;   /*  7.09:1 */
+
+  /* Category pill — text colour, chip background */
+  --c-groceries:     #5ce5ab; --cb-groceries:     #163b2c;
+  --c-dining:        #ffa87f; --cb-dining:        #3d2117;
+  --c-housing:       #eceae5; --cb-housing:       #34332f;
+  --c-utilities:     #8ec2ff; --cb-utilities:     #172b40;
+  --c-transport:     #6bd96b; --cb-transport:     #16341a;
+  --c-entertainment: #fbaacd; --cb-entertainment: #3a1d2b;
+  --c-health:        #bcb1f9; --cb-health:        #262240;
+  --c-debt:          #ff9d97; --cb-debt:          #3d1c1c;
+  --c-other:         #c6c4bc; --cb-other:         #2e2e2b;
+  --c-uncategorized: #b0aea7; --cb-uncategorized: #282826;
+
+  /* Category bar accents, in CATEGORIES order — the order the checker walks.
+     Housing and Other/Uncategorized stay deliberate neutrals rather than hues,
+     which keeps the real hue count at seven, inside the ~8 ceiling a palette
+     can carry. */
+  --bar-groceries:     #22d69a;   /* aqua    */
+  --bar-dining:        #ff7f4d;   /* orange  */
+  --bar-housing:       #dedcd6;   /* neutral */
+  --bar-utilities:     #5aa2ff;   /* blue    */
+  --bar-transport:     #3fc23f;   /* green   */
+  --bar-entertainment: #f38cb8;   /* magenta */
+  --bar-health:        #9385fb;   /* violet  */
+  --bar-debt:          #ff6663;   /* red     */
+  --bar-other:         #aeaba3;   /* neutral */
+  --bar-uncategorized: #6e6c66;   /* neutral */
 }
-
 /* ── Reset ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -88,7 +116,7 @@ button, select, .menu-link {
 
 html, body {
   height: 100%;
-  font-family: 'Syne', system-ui, sans-serif;
+  font-family: var(--font);
   background: var(--bg);
   color: var(--ink);
   font-size: 15px;
@@ -97,34 +125,39 @@ html, body {
 
 body { display: flex; flex-direction: column; overflow: hidden; }
 
-.mono { font-family: 'IBM Plex Mono', monospace; }
+.mono { font-variant-numeric: tabular-nums; }
 
 /* ── App bar ── */
+/* Three columns, not space-between. The sign-in button is display:none once
+   you are signed in, and with space-between that shoved the title to the
+   right edge — a layout that only appeared for signed-in users. The outer
+   columns hold their width whether or not anything is in them. */
 .appbar {
-  background: var(--ink);
-  color: #fafaf8;
-  display: flex;
+  background: var(--chrome);
+  color: var(--ink);
+  border-bottom: 1px solid var(--rule);
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-between;
   padding: 12px 16px;
   flex-shrink: 0;
   z-index: 10;
 }
+.appbar > :last-child { justify-self: end; }
 
 .appbar-logo {
-  font-family: 'Syne', sans-serif;
-  font-weight: 600;
-  font-size: 15px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-weight: 700;
+  font-size: 17px;
+  letter-spacing: -0.02em;
+  text-align: center;
 }
 
-.menu-logo { color: #fafaf8; }
+.menu-logo { color: var(--ink); }
 
 .icon-btn {
   background: transparent;
   border: none;
-  color: #fafaf8;
+  color: var(--ink);
   cursor: pointer;
   padding: 4px 6px;
   border-radius: 6px;
@@ -133,19 +166,18 @@ body { display: flex; flex-direction: column; overflow: hidden; }
   transition: background .15s;
 }
 .icon-btn:hover { background: rgba(255,255,255,.12); }
-.icon-btn-light { color: #fafaf8; }
+.icon-btn-light { color: var(--ink); }
 
 .signin-btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: rgba(255,255,255,.12);
-  color: #fafaf8;
-  border: 1px solid rgba(255,255,255,.2);
-  border-radius: var(--radius-sm);
-  padding: 6px 12px;
-  font-size: 12px;
-  font-family: 'Syne', sans-serif;
+  background: rgba(255,255,255,.07);
+  color: var(--ink);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-pill);
+  padding: 7px 14px;
+  font-size: 12.5px;
   font-weight: 500;
   letter-spacing: 0.04em;
   cursor: pointer;
@@ -153,12 +185,27 @@ body { display: flex; flex-direction: column; overflow: hidden; }
 }
 .signin-btn:hover { background: rgba(255,255,255,.2); }
 
+/* ── Drawer scrim ──
+   Same visibility-with-a-real-duration trick as the drawer below: a closed
+   scrim must not stay painted over the page swallowing taps. */
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  background: rgba(0,0,0,.55);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity .2s ease-out, visibility .2s;
+}
+.scrim.open { opacity: 1; visibility: visible; }
+
 /* ── Side menu ── */
 .side-menu {
   position: fixed;
   top: 0; left: 0; bottom: 0;
   width: 240px;
-  background: var(--ink);
+  background: var(--chrome);
+  border-right: 1px solid var(--rule);
   transform: translateX(-100%);
   z-index: 200;
   display: flex;
@@ -208,8 +255,7 @@ body { display: flex; flex-direction: column; overflow: hidden; }
   background: transparent;
   border: none;
   border-radius: var(--radius-sm);
-  color: rgba(250,250,248,.7);
-  font-family: 'Syne', sans-serif;
+  color: var(--ink-2);
   font-size: 13px;
   font-weight: 500;
   letter-spacing: 0.03em;
@@ -218,9 +264,9 @@ body { display: flex; flex-direction: column; overflow: hidden; }
   text-align: left;
   transition: background .15s, color .15s;
 }
-.menu-link:hover { background: rgba(255,255,255,.08); color: #fafaf8; }
-.menu-danger { color: #e08080; }
-.menu-danger:hover { background: rgba(180,60,60,.15); color: #f09090; }
+.menu-link:hover { background: rgba(255,255,255,.06); color: var(--ink); }
+.menu-danger { color: var(--err); }
+.menu-danger:hover { background: var(--err-bg); color: var(--err); }
 
 /* ── Pages ──
    One <main> is the scroll container between the fixed app bar and total bar;
@@ -246,48 +292,179 @@ main {
   border: 0;
 }
 
-/* ── Hero block ── */
-.hero-block {
-  padding: 28px 20px 20px;
-  border-bottom: 1px solid var(--rule);
+/* ── Hero ──
+   The weekly goal, full-bleed on the page rather than inside a card. It is
+   the question the app exists to answer, so nothing frames it. */
+/* The hero is a single vivid gradient panel, and the gradient IS the signal:
+   cool-to-lime while there's budget left, a warm ramp once there isn't. The
+   number says "over" in words too, so the colour isn't carrying it alone. */
+.hero {
+  margin: 14px;
+  padding: 26px 26px 24px;
+  border-radius: var(--radius-lg);
+  background: var(--hero-good);
+  color: var(--hero-ink);
 }
+.hero.over { background: var(--hero-over); }
+
+/* With no goal set the hero is a form, not a readout — a gradient behind an
+   input is just noise, so it falls back to an ordinary card. */
+.hero.empty {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  color: var(--ink);
+}
+
 .hero-label {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  color: var(--ink-3);
-  font-weight: 500;
-  margin-bottom: 4px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin-bottom: 12px;
+  opacity: .7;
 }
-.hero-amount {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 48px;
+.hero.empty .hero-label { opacity: 1; color: var(--ink); }
+
+.hero .goal-amount,
+.hero .goal-amount.over {
+  font-size: 46px;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  color: var(--hero-ink);
+}
+.hero .goal-unit,
+.hero .goal-amount.over .goal-unit {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--hero-ink);
+  opacity: .6;
+}
+.hero .goal-track {
+  height: 10px;
+  border-radius: var(--radius-pill);
+  background: rgba(10,11,16,.15);
+  margin: 20px 0 12px;
+}
+.hero .goal-fill,
+.hero .goal-fill.over {
+  border-radius: var(--radius-pill);
+  background: var(--hero-ink);
+}
+.hero .goal-meta {
+  font-size: 12.5px;
   font-weight: 500;
+  color: var(--hero-ink);
+  opacity: .66;
+}
+
+/* "Edit goal" becomes a pill on the gradient — an underlined link on a bright
+   panel reads as a mistake. */
+.hero .link-btn {
+  margin-top: 18px;
+  padding: 9px 17px;
+  border-radius: var(--radius-pill);
+  background: var(--hero-ink);
+  color: #fff;
+  font-weight: 600;
+  font-size: 12px;
+  text-decoration: none;
+}
+.hero .link-btn:hover { color: #fff; opacity: .84; }
+.hero.empty .link-btn {
+  background: none;
+  padding: 0;
+  color: var(--err);
+  text-decoration: underline;
+}
+
+/* ── Secondary stats ──
+   The month total, demoted out of the headline. Still useful, no longer the
+   first thing the eye lands on. */
+.stat-strip {
+  display: flex;
+  gap: 10px;
+  padding: 0 14px;
+}
+.stat {
+  flex: 1;
+  min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+}
+.stat-label {
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--ink-2);
+  margin-bottom: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.stat-value {
+  font-variant-numeric: tabular-nums;
+  font-size: 26px;
+  font-weight: 700;
   letter-spacing: -0.03em;
   color: var(--ink);
   line-height: 1;
-  margin-bottom: 5px;
 }
-.hero-sub {
+.stat-sub {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 11px;
   font-size: 12px;
   color: var(--ink-3);
-  font-family: 'IBM Plex Mono', monospace;
+  white-space: nowrap;
+}
+/* The chip keeps its size; the caption beside it is what gives way on a
+   narrow screen, and it truncates with an ellipsis rather than a hard cut. */
+.stat-cap {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-/* ── Cards ── */
+/* Delta chip — the reference's "+15.7%" treatment. Direction is in the sign
+   as well as the colour. */
+.chip {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+/* This tracks spending, so the sign and the colour disagree on purpose:
+   spending MORE is the bad direction. Green is never "went up". */
+.chip.good { background: var(--ok-bg);  color: var(--ok); }
+.chip.bad  { background: var(--err-bg); color: var(--err); }
+
+/* ── Cards ──
+   Separate panels rather than full-bleed slabs: the gaps do the dividing, so
+   no rules between them are needed. */
 .card {
   background: var(--surface);
-  border-bottom: 1px solid var(--rule);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
   padding: 18px 20px;
+  margin: 12px 14px;
 }
 
+/* Section headings read as headings: normal size, sentence case, full-strength
+   ink. The 10px letterspaced uppercase they replaced was the single biggest
+   source of the dated feel. */
 .card-label {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  color: var(--ink-3);
-  font-weight: 500;
-  margin-bottom: 14px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  margin-bottom: 16px;
 }
 
 /* ── Inputs ── */
@@ -310,11 +487,14 @@ input, select {
   border-radius: var(--radius-sm);
   background: var(--bg);
   color: var(--ink);
-  font-family: 'Syne', sans-serif;
   font-size: 13px;
   transition: border-color .15s;
   appearance: none;
 }
+/* Pointer focus keeps the quiet border-only treatment; keyboard focus gets a
+   real ring, added back by the :focus-visible rules at the end of the file.
+   The higher-specificity selector there is deliberate — `input:focus` would
+   otherwise win and keep the outline suppressed. */
 input:focus, select:focus {
   outline: none;
   border-color: var(--ink);
@@ -332,15 +512,13 @@ input::placeholder { color: var(--ink-3); }
 
 .btn-primary {
   background: var(--ink);
-  color: #fafaf8;
+  color: var(--bg);
   border: none;
-  border-radius: var(--radius-sm);
-  padding: 10px 18px;
-  font-family: 'Syne', sans-serif;
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  border-radius: var(--radius-pill);
+  padding: 11px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
   cursor: pointer;
   transition: opacity .15s;
 }
@@ -350,30 +528,134 @@ input::placeholder { color: var(--ink-3); }
   background: transparent;
   color: var(--ink-2);
   border: 1px solid var(--rule);
-  border-radius: var(--radius-sm);
-  padding: 10px 16px;
-  font-family: 'Syne', sans-serif;
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0.04em;
+  border-radius: var(--radius-pill);
+  padding: 11px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
   cursor: pointer;
   transition: border-color .15s, color .15s;
 }
 .btn-ghost:hover { border-color: var(--ink-2); color: var(--ink); }
 
+/* ── Weekly goal ──
+   The one figure on the page that ignores the filter row; it always means the
+   current Sunday-to-Saturday week. */
+.goal-amount {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-variant-numeric: tabular-nums;
+  font-size: 30px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: var(--ink);
+}
+.goal-unit {
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--ink-3);
+}
+/* Over budget is stated in words as well as color — "over" next to the number
+   — so the red isn't carrying the meaning on its own. */
+.goal-amount.over,
+.goal-amount.over .goal-unit { color: var(--c-debt); }
+
+.goal-track {
+  height: 6px;
+  margin: 14px 0 10px;
+  background: var(--rule-2);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.goal-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--ink);
+  transition: width .25s ease;
+}
+.goal-fill.over { background: var(--c-debt); }
+
+.goal-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+.goal-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+/* The shared `input` rule stretches to 100% for the stacked entry form; this
+   one shares a row with its buttons. */
+.goal-form input {
+  width: auto;
+  flex: 1 1 130px;
+  min-width: 0;
+}
+.goal-hint { margin: 10px 0 0; }
+
+.link-btn {
+  margin-top: 12px;
+  padding: 0;
+  background: none;
+  border: none;
+  font-size: 11px;
+  color: var(--ink-2);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.link-btn:hover { color: var(--ink); }
+.link-danger { color: var(--c-debt); }
+.link-danger:hover { color: var(--c-debt); opacity: .78; }
+
 /* ── Status pill ── */
 .status-pill {
   margin-top: 10px;
   font-size: 11px;
-  font-family: 'IBM Plex Mono', monospace;
+  font-variant-numeric: tabular-nums;
   color: var(--ink-3);
   padding: 7px 10px;
   border-radius: var(--radius-sm);
   background: var(--bg);
   border: 1px solid var(--rule-2);
 }
-.status-pill.ok  { color: #2a7040; background: #eef7f0; border-color: #c8e8d0; }
-.status-pill.err { color: #901a1a; background: #fdf0f0; border-color: #f0c8c8; }
+.status-pill.ok  { color: var(--ok);  background: var(--ok-bg);  border-color: #24513c; }
+.status-pill.err { color: var(--err); background: var(--err-bg); border-color: #5a2a2a; }
+
+/* ── Toast ──
+   Sync messages used to sit in the entry card. The entry form is a modal now,
+   so they surface here instead: above the action bar, brief, and out of the
+   way of the numbers. */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 76px;
+  transform: translateX(-50%);
+  z-index: 250;
+  max-width: calc(100% - 28px);
+  padding: 9px 15px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--rule);
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  text-align: center;
+  box-shadow: var(--shadow);
+}
+.toast.ok  { color: var(--ok);  background: var(--ok-bg);  border-color: #24513c; }
+.toast.err { color: var(--err); background: var(--err-bg); border-color: #5a2a2a; }
 
 /* ── Filter row ──
    Sits above the content it scopes, not inside a card, so everything below
@@ -385,7 +667,7 @@ input::placeholder { color: var(--ink-3); }
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
-  padding: 14px 20px 0;
+  padding: 6px 20px 0;
 }
 /* Each label stays glued to the control it names, so a wrap on a narrow
    phone breaks between the two filters rather than orphaning a label. */
@@ -395,17 +677,16 @@ input::placeholder { color: var(--ink-3); }
   gap: 8px;
 }
 .filter-label {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  color: var(--ink-3);
+  font-size: 12px;
   font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--ink-3);
 }
 .month-select {
   width: auto;
-  padding: 6px 10px;
-  font-size: 11px;
-  border-radius: var(--radius-sm);
+  padding: 8px 14px;
+  font-size: 12.5px;
+  border-radius: var(--radius-pill);
 }
 
 /* The From date and its clear button. The shared `input` rule stretches to
@@ -413,9 +694,10 @@ input::placeholder { color: var(--ink-3); }
    their content instead. */
 .range-from {
   width: auto;
-  padding: 5px 8px;
-  font-size: 11px;
-  border-color: var(--rule-2);
+  padding: 7px 12px;
+  font-size: 12.5px;
+  border-radius: var(--radius-pill);
+  border-color: var(--rule);
 }
 .range-clear {
   display: inline-flex;
@@ -448,7 +730,7 @@ input::placeholder { color: var(--ink-3); }
 .chart-note {
   font-size: 11px;
   color: var(--ink-3);
-  font-family: 'IBM Plex Mono', monospace;
+  font-variant-numeric: tabular-nums;
   margin-top: 10px;
 }
 .chart-note:empty { display: none; }
@@ -457,9 +739,10 @@ input::placeholder { color: var(--ink-3); }
 .cat-bars { display: flex; flex-direction: column; gap: 10px; }
 .cat-bar-row { display: flex; align-items: center; gap: 10px; }
 .cat-bar-name {
-  font-size: 11px;
+  font-size: 12.5px;
+  font-weight: 500;
   color: var(--ink-2);
-  width: 88px;
+  width: 96px;
   flex-shrink: 0;
   white-space: nowrap;
   overflow: hidden;
@@ -467,21 +750,22 @@ input::placeholder { color: var(--ink-3); }
 }
 .cat-bar-track {
   flex: 1;
-  height: 4px;
+  height: 8px;
   background: var(--rule-2);
-  border-radius: 2px;
+  border-radius: var(--radius-pill);
   overflow: hidden;
 }
 .cat-bar-fill {
   height: 100%;
-  border-radius: 2px;
+  border-radius: var(--radius-pill);
   transition: width .4s ease;
 }
 .cat-bar-val {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 11px;
-  color: var(--ink-3);
-  width: 60px;
+  font-variant-numeric: tabular-nums;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+  width: 64px;
   text-align: right;
   flex-shrink: 0;
 }
@@ -517,7 +801,7 @@ input::placeholder { color: var(--ink-3); }
 }
 
 .p-date {
-  font-family: 'IBM Plex Mono', monospace;
+  font-variant-numeric: tabular-nums;
   font-size: 11px;
   color: var(--ink-3);
 }
@@ -546,7 +830,7 @@ input::placeholder { color: var(--ink-3); }
 .pill-uncategorized { color: var(--c-uncategorized); background: var(--cb-uncategorized); }
 
 .p-amount {
-  font-family: 'IBM Plex Mono', monospace;
+  font-variant-numeric: tabular-nums;
   font-size: 14px;
   font-weight: 500;
   color: var(--ink);
@@ -568,13 +852,14 @@ input::placeholder { color: var(--ink-3); }
 }
 .act-btn .material-symbols-outlined { font-size: 17px; }
 .act-btn:hover { background: var(--rule-2); color: var(--ink); }
-.act-btn.del:hover { background: #fdf0f0; color: #901a1a; }
+.act-btn.del:hover { background: var(--err-bg); color: var(--err); }
 
 /* ── Edit modal ── */
 .modal-bg {
   position: fixed;
   inset: 0;
-  background: rgba(20,20,18,.5);
+  background: rgba(0,0,0,.66);
+  backdrop-filter: blur(3px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -583,11 +868,12 @@ input::placeholder { color: var(--ink-3); }
 }
 .modal-box {
   background: var(--surface);
-  border-radius: var(--radius);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-lg);
   padding: 22px;
   width: 100%;
   max-width: 460px;
-  box-shadow: 0 8px 40px rgba(0,0,0,.18);
+  box-shadow: var(--shadow);
 }
 .modal-box .card-label { margin-bottom: 16px; }
 
@@ -616,26 +902,83 @@ input::placeholder { color: var(--ink-3); }
 .cat-table td:nth-child(2),
 .cat-table td:nth-child(3) {
   text-align: right;
-  font-family: 'IBM Plex Mono', monospace;
+  font-variant-numeric: tabular-nums;
   font-size: 12px;
 }
 
 .subtle { font-size: 12px; color: var(--ink-3); margin-bottom: 4px; }
 
 /* ── Total bar ── */
-.total-bar {
-  background: var(--ink);
-  color: #fafaf8;
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 15px;
-  font-weight: 500;
-  padding: 12px 20px;
-  text-align: right;
+/* ── Action bar ──
+   The old footer was a heavy black band carrying one number. It now shares
+   the space with the entry button, which is what freed the whole first screen
+   for actual data. */
+.actionbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  background: var(--chrome);
+  border-top: 1px solid var(--rule);
   flex-shrink: 0;
+}
+.actionbar-total {
+  font-variant-numeric: tabular-nums;
+  font-size: 12.5px;
+  color: var(--ink-2);
   letter-spacing: -0.01em;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+  background: var(--ink);
+  color: var(--bg);
+  border: none;
+  border-radius: var(--radius-pill);
+  padding: 11px 20px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+  transition: opacity .15s, transform .12s ease;
+}
+.fab .material-symbols-outlined { font-size: 18px; }
+.fab:hover  { opacity: .88; }
+.fab:active { transform: scale(.97); }
+
+/* ── Keyboard focus ──
+   The ring has to read on three different grounds: the near-black page, the
+   dark cards, and the bright gradient hero. One colour cannot do all three —
+   a white ring vanishes on lime — so the surface sets --focus-ring and the
+   single rule below picks it up by inheritance. */
+.hero        { --focus-ring: var(--hero-ink); }
+.hero.empty  { --focus-ring: var(--ink); }   /* a plain card again, so back to light */
+
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+/* Beats `input:focus { outline: none }` above, which is scoped to pointer
+   focus but is specific enough to win against a bare :focus-visible. */
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
 }
 
 /* ── Large screen centering ── */
 @media (min-width: 700px) {
-  .card, .hero-block, .filter-row { max-width: 760px; margin-inline: auto; }
+  .card, .hero, .stat-strip, .filter-row, .actionbar-inner {
+    max-width: 760px;
+    margin-inline: auto;
+  }
 }

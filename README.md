@@ -34,6 +34,7 @@ app works fine without signing in.
 | `script.js` | Everything else — state, rendering, Google Sheets sync, the chart |
 | `style.css` | Design tokens and layout. No framework |
 | `service-worker.js` | Offline caching |
+| `scripts/check_contrast.js` | Verifies the palette's contrast ratios and colour separation. Not served to the browser |
 | `manifest.json` | Makes it installable as a PWA |
 
 Data lives in two places at once. `localStorage` is what the UI reads from; a
@@ -49,8 +50,17 @@ Google Sheet is the durable copy. Each purchase carries a generated `id` and a
 - **The order of `CATEGORIES` is load-bearing.** `suggestCategory()` takes the
   first keyword match and keywords overlap (`"gas bill"` hits both Utilities
   and Transportation). Reordering changes what gets auto-detected.
-- **The category colors were validated, not chosen by eye.** There's a note in
-  `style.css` with the command to re-run before changing any of them.
+- **The app is dark, and the palette was re-derived for it.** The category
+  colours are not the old light-mode ones dimmed: the previous set was
+  validated against a white surface, and moving to a dark one changes both the
+  WCAG ratios and the perceived gaps between hues.
+- **The category colours were verified, not chosen by eye.** Run
+  `node scripts/check_contrast.js` after changing any value in the `:root`
+  block; it exits non-zero on a regression. Order still matters, because the
+  separation check compares *adjacent* entries in `CATEGORIES` order.
+  (`style.css` used to point at `scripts/validate_palette.js`, which was never
+  committed. `check_contrast.js` is a simpler replacement and does not
+  reproduce that tool's exact figures.)
 - **`activeRange` in `script.js` is the single source of truth for the time
   filter**, and `inSelectedRange()` is the only definition of "is this purchase
   in it". The purchases list, the footer total, the hero, the category bars and
@@ -61,7 +71,16 @@ Google Sheet is the durable copy. Each purchase carries a generated `id` and a
   each other. Two overlapping ranges would need an intersection rule nobody
   could predict from looking at the controls.
 - **The service worker is network-first for HTML/JS/CSS**, so deploys land
-  without bumping `CACHE_NAME` by hand.
+  without bumping `CACHE_NAME` by hand. It caches **same-origin responses
+  only**, so on a cold offline first load the CDN font and Chart.js are both
+  missing: type falls back to `system-ui` and the trend card hides itself.
+  The app itself still renders in full from cache.
+- **The keyboard focus ring is set per surface, not globally.** A single
+  colour cannot work on both the near-black page and the bright gradient hero,
+  so each surface sets `--focus-ring` and one `:focus-visible` rule reads it by
+  inheritance. Note `input:focus { outline: none }` is scoped to pointer focus
+  and is specific enough to beat a bare `:focus-visible`, which is why there is
+  a matching `input:focus-visible` rule.
 - **Anything the sheet doesn't have goes up on the next sign-in.**
   `pushUnsyncedPurchases()` appends every purchase still without a `row` once
   `reconcileLocalWithSheet()` has matched what it can, in one batched call.
@@ -73,6 +92,21 @@ Google Sheet is the durable copy. Each purchase carries a generated `id` and a
   half-failed upload would either lose entries or duplicate them.
 - **A failed sheet write never discards the entry.** It stays local without a
   `row` — exactly the state the next sync uploads.
+- **The weekly goal ignores the time filter, on purpose.** It always means the
+  current Sunday-to-Saturday week. The filter is for looking around; the goal
+  answers "how am I doing right now", and a figure that moved when you changed
+  the filter would answer neither question.
+- **The goal is a standing value, not a weekly entry.** Set it once and it
+  carries week to week. The only thing that clears it is "Remove goal", which
+  sits inside the edit state — tap "Edit goal" to reach it; it is deliberately
+  not on the face of the card. `weekBounds()` derives
+  the current Sunday-to-Saturday window from the clock on every render, so the
+  spend resets at the rollover while the target stays put. Neither "Clear
+  device" nor "Sign out & clear" touch it — those erase purchases, and the
+  goal isn't one.
+- **The goal lives on the device only.** It isn't a purchase, so it has no home
+  in the sheet's `A:E`, and it won't survive a reinstall or clearing site data.
+  It's one number and it's quick to re-enter.
 - **A cached `row` is a hint, never a write address.** Every update and delete
   calls `resolveSheetRow()` first, matching the id in column E. Row numbers are
   positions and positions move: a sheet delete that commits but fails to report
