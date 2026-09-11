@@ -356,9 +356,12 @@ function updateHero() {
       const diff = total - prev;
       const pct  = Math.abs((diff / prev) * 100).toFixed(0);
       const sign = diff >= 0 ? "+" : "−";
-      subEl.textContent = `${sign}$${Math.abs(diff).toFixed(2)} (${sign}${pct}%) vs last month`;
+      // Spending more than last month is the bad direction, whatever the sign.
+      subEl.innerHTML =
+        `<span class="chip ${diff > 0 ? "bad" : "good"}">${sign}${pct}%</span>` +
+        `<span class="stat-cap">vs last month</span>`;
     } else {
-      subEl.textContent = "\u00a0";
+      subEl.innerHTML = "&nbsp;";
     }
     return;
   }
@@ -438,7 +441,9 @@ function renderLastWeekStat() {
   if (weeklyGoal === null || total === 0) { subEl.innerHTML = "&nbsp;"; return; }
   const diff = total - weeklyGoal;
   const sign = diff >= 0 ? "+" : "−";
-  subEl.textContent = `${sign}$${Math.abs(diff).toFixed(2)} vs goal`;
+  subEl.innerHTML =
+    `<span class="chip ${diff > 0 ? "bad" : "good"}">${sign}$${Math.abs(diff).toFixed(2)}</span>` +
+    `<span class="stat-cap">vs goal</span>`;
 }
 
 // Today through Saturday inclusive, so Sunday reads 7 and Saturday reads 1.
@@ -471,9 +476,20 @@ function renderWeeklyGoal({ force = false } = {}) {
   // Don't tear the input out from under someone mid-type.
   if (goalEditing && !force) return;
 
-  const range = weekRangeLabel(weekBounds());
+  const range   = weekRangeLabel(weekBounds());
+  const editing = goalEditing || weeklyGoal === null;
+  const spent   = weekSpend();
+  const over    = !editing && weeklyGoal - spent < 0;
 
-  if (goalEditing || weeklyGoal === null) {
+  // The panel's own colour carries the state, so it has to know it: a bright
+  // gradient behind an empty form is noise, and behind an overspend it's wrong.
+  const hero = document.getElementById("goalHero");
+  if (hero) {
+    hero.classList.toggle("empty", editing);
+    hero.classList.toggle("over",  over);
+  }
+
+  if (editing) {
     const isFirst = weeklyGoal === null;
     body.innerHTML = `
       <div class="goal-form">
@@ -491,11 +507,9 @@ function renderWeeklyGoal({ force = false } = {}) {
     return;
   }
 
-  const spent = weekSpend();
-  const left  = weeklyGoal - spent;
-  const over  = left < 0;
-  const pct   = Math.min(100, (spent / weeklyGoal) * 100);
-  const days  = daysLeftInWeek();
+  const left = weeklyGoal - spent;
+  const pct  = Math.min(100, (spent / weeklyGoal) * 100);
+  const days = daysLeftInWeek();
 
   body.innerHTML = `
     <div class="goal-amount${over ? " over" : ""}">
@@ -892,10 +906,13 @@ function renderTrendChart() {
   document.getElementById("trendLabel").textContent = heading;
   document.getElementById("trendNote").textContent  = note;
 
-  const accent  = cssVar("--ink")   || "#1a1a18";
-  const context = cssVar("--ink-3") || "#aaa89f";
-  const rule    = cssVar("--rule-2") || "#f0ede8";
-  const ink2    = cssVar("--ink-2") || "#6a6860";
+  const accent  = cssVar("--chart-bar-now") || "#b79ef0";
+  const context = cssVar("--chart-bar")     || "#4e4a6b";
+  const rule    = cssVar("--rule-2")        || "#1f2230";
+  const ink2    = cssVar("--ink-2")         || "#a9adbd";
+  const ink     = cssVar("--ink")           || "#f7f8fa";
+  const panel   = cssVar("--surface-2")     || "#1e212c";
+  const font    = "'Plus Jakarta Sans', system-ui, sans-serif";
 
   trendChart?.destroy();
   trendChart = new Chart(canvas.getContext("2d"), {
@@ -906,9 +923,9 @@ function renderTrendChart() {
         data: values,
         backgroundColor: values.map((_, i) => i === current ? accent : context),
         // Rounded at the data end, square on the baseline.
-        borderRadius: { topLeft: 4, topRight: 4, bottomLeft: 0, bottomRight: 0 },
+        borderRadius: { topLeft: 8, topRight: 8, bottomLeft: 0, bottomRight: 0 },
         borderSkipped: false,
-        maxBarThickness: 24,
+        maxBarThickness: 34,
       }],
     },
     options: {
@@ -918,11 +935,19 @@ function renderTrendChart() {
       plugins: {
         legend: { display: false },   // one series — the card label names it
         tooltip: {
-          backgroundColor: accent,
+          // A dark panel with light text. The bar colour can't be reused as
+          // the tooltip background any more: it is light now, and Chart.js
+          // defaults its text to white, which would be invisible on it.
+          backgroundColor: panel,
+          borderColor: cssVar("--rule") || "#272a36",
+          borderWidth: 1,
+          titleColor: ink2,
+          bodyColor:  ink,
+          cornerRadius: 10,
           padding: 10,
           displayColors: false,
-          titleFont: { family: "'IBM Plex Mono', monospace", size: 11 },
-          bodyFont:  { family: "'IBM Plex Mono', monospace", size: 12 },
+          titleFont: { family: font, size: 11, weight: "500" },
+          bodyFont:  { family: font, size: 13, weight: "600" },
           callbacks: {
             title: items => unit === "day" ? `Day ${items[0].label}` : items[0].label,
             label: item => `$${item.parsed.y.toFixed(2)}`,
@@ -935,7 +960,7 @@ function renderTrendChart() {
           border: { color: rule },
           ticks:  {
             color: ink2,
-            font: { family: "'IBM Plex Mono', monospace", size: 10 },
+            font: { family: font, size: 11, weight: "500" },
             maxRotation: 0,
             autoSkipPadding: 12,
           },
@@ -946,7 +971,7 @@ function renderTrendChart() {
           border: { display: false },
           ticks:  {
             color: ink2,
-            font: { family: "'IBM Plex Mono', monospace", size: 10 },
+            font: { family: font, size: 11, weight: "500" },
             padding: 8,
             maxTicksLimit: 5,
             callback: v => "$" + (v >= 1000 ? (v / 1000) + "k" : v),

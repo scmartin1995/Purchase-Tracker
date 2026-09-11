@@ -94,15 +94,23 @@ function simulate(hex, kind) {
 // ── the palette under test ────────────────────────────────────────────────
 // Kept in CATEGORIES order, because adjacency is what the separation check
 // looks at and that order is what the app actually renders.
-const SURFACE = '#171716';   // --surface, the card the pills and bars sit on
-const PAGE    = '#0e0e0d';   // --bg
+const SURFACE = '#151720';   // --surface, the card the pills and bars sit on
+const PAGE    = '#0a0b10';   // --bg
 
 const CHROME = [
-  ['--ink on --bg',        '#f5f4f1', PAGE,    TEXT_MIN],
-  ['--ink on --surface',   '#f5f4f1', SURFACE, TEXT_MIN],
-  ['--ink-2 on --surface', '#b4b1aa', SURFACE, TEXT_MIN],
-  ['--ink-3 on --surface', '#8b8881', SURFACE, UI_MIN],
-  ['--ink-3 on --bg',      '#8b8881', PAGE,    UI_MIN],
+  ['--ink on --bg',        '#f7f8fa', PAGE,    TEXT_MIN],
+  ['--ink on --surface',   '#f7f8fa', SURFACE, TEXT_MIN],
+  ['--ink-2 on --surface', '#a9adbd', SURFACE, TEXT_MIN],
+  ['--ink-3 on --surface', '#7f8496', SURFACE, UI_MIN],
+  ['--ink-3 on --bg',      '#7f8496', PAGE,    UI_MIN],
+  // Text sitting on the gradient hero, at both ends of each gradient.
+  ['hero ink on mint',     '#0a0b10', '#6fe7c8', TEXT_MIN],
+  ['hero ink on lime',     '#0a0b10', '#d8f65e', TEXT_MIN],
+  ['hero ink on peach',    '#0a0b10', '#ffc07a', TEXT_MIN],
+  ['hero ink on pink',     '#0a0b10', '#ff6fa3', TEXT_MIN],
+  // Delta chips.
+  ['ok chip',              '#c8f560', '#23300f', TEXT_MIN],
+  ['err chip',             '#ff8f8a', '#3a1a1e', TEXT_MIN],
 ];
 
 const PILLS = [

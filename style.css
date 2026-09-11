@@ -1,47 +1,59 @@
 /* ── Tokens ──
    Dark and high-contrast. Every ratio quoted below is produced by
    `node scripts/check_contrast.js`, which is committed next to this file.
-   Re-run it after changing any value here.
+   Re-run it after changing any value here — it exits non-zero on a regression.
 
-   These category colours are NOT the old light-mode ones dimmed. The previous
-   set was validated against a WHITE surface; moving to a dark one changes both
-   the WCAG ratios and the perceived gaps between hues, so the whole palette
-   was re-derived and re-checked against #171716.
+   The category colours were re-derived for a dark surface (the set before them
+   was validated against white, where both the WCAG ratios and the perceived
+   gaps between hues are different) and re-checked when the surface moved from
+   warm black to this blue-black.
 
-   Worst adjacent separation now: ΔE 24.4 for normal vision, ΔE 20.6 under the
-   worst of protanopia / deuteranopia / tritanopia. The light palette managed
-   18.7 and 8.4. Every pill's text clears 6.5:1 on its own chip, and every bar
-   clears 3:1 against the card it is drawn on.
+   Worst adjacent separation: ΔE 24.4 for normal vision, ΔE 20.6 under the
+   worst of protanopia / deuteranopia / tritanopia. Every pill's text clears
+   6.5:1 on its own chip, and every bar clears 3:1 against the card.
 
-   Order is still load-bearing: the separation check compares ADJACENT entries
-   in CATEGORIES order, so reordering CATEGORIES means re-running the checker.
-
-   (The old comment here pointed at `scripts/validate_palette.js`. That tool
-   was never committed — check_contrast.js is a different, simpler one written
-   to replace it, and it does not reproduce the old figures exactly.) */
+   Order is load-bearing: the separation check compares ADJACENT entries in
+   CATEGORIES order, so reordering CATEGORIES means re-running the checker. */
 :root {
-  --bg:        #0e0e0d;   /* the page              */
-  --surface:   #171716;   /* cards                 */
-  --surface-2: #202020;   /* tracks, wells, toasts */
-  --chrome:    #141413;   /* app bar and drawer    */
+  /* One typeface throughout. Numbers use tabular figures rather than a
+     separate monospace, which is what `.mono` now means. */
+  --font: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
 
-  --ink:       #f5f4f1;   /* 17.56:1 on --bg       */
-  --ink-2:     #b4b1aa;   /*  8.38:1 on --surface  */
-  --ink-3:     #8b8881;   /*  5.07:1 on --surface  */
-  --accent:    #f5f4f1;
+  --bg:        #0a0b10;   /* the page              */
+  --surface:   #151720;   /* cards                 */
+  --surface-2: #1e212c;   /* tracks, wells, toasts */
+  --chrome:    #0d0f16;   /* app bar and drawer    */
 
-  --rule:      #2b2b28;
-  --rule-2:    #232321;
+  --ink:       #f7f8fa;   /* 18.50:1 on --bg       */
+  --ink-2:     #a9adbd;   /*  8.00:1 on --surface  */
+  --ink-3:     #7f8496;   /*  4.80:1 on --surface  */
+  --accent:    #f7f8fa;
 
-  --radius:    14px;
-  --radius-sm: 8px;
-  --radius-lg: 20px;
+  --rule:      #272a36;
+  --rule-2:    #1f2230;
 
-  --shadow:    0 1px 2px rgba(0,0,0,.5), 0 10px 30px rgba(0,0,0,.4);
+  --radius:      20px;
+  --radius-sm:   12px;
+  --radius-lg:   26px;
+  --radius-pill: 999px;
 
-  /* Semantic states */
-  --ok:     #5ce5ab;  --ok-bg:  #12291f;
-  --err:    #ff9d97;  --err-bg: #341717;
+  --shadow: 0 1px 2px rgba(0,0,0,.6), 0 14px 40px rgba(0,0,0,.45);
+
+  /* Hero gradients. The card itself carries the signal, not just the number
+     printed on it: under budget is cool-to-lime, over swaps to a warm ramp.
+     --hero-ink clears 7.5:1 against the darkest stop of either gradient. */
+  --hero-good: linear-gradient(125deg, #6fe7c8 0%, #a9f07c 48%, #d8f65e 100%);
+  --hero-over: linear-gradient(125deg, #ffc07a 0%, #ff8f8a 52%, #ff6fa3 100%);
+  --hero-ink:  #0a0b10;
+
+  /* Trend chart. One measure over time, so one hue: the period in progress is
+     picked out and the finished ones recede. */
+  --chart-bar:      #4e4a6b;
+  --chart-bar-now:  #b79ef0;
+
+  /* Delta chips and status */
+  --ok:     #c8f560;  --ok-bg:  #23300f;   /* 11.12:1 */
+  --err:    #ff8f8a;  --err-bg: #3a1a1e;   /*  7.09:1 */
 
   /* Category pill — text colour, chip background */
   --c-groceries:     #5ce5ab; --cb-groceries:     #163b2c;
@@ -58,8 +70,7 @@
   /* Category bar accents, in CATEGORIES order — the order the checker walks.
      Housing and Other/Uncategorized stay deliberate neutrals rather than hues,
      which keeps the real hue count at seven, inside the ~8 ceiling a palette
-     can carry. On a dark surface they are light greys; on the old light one
-     they were near-black. */
+     can carry. */
   --bar-groceries:     #22d69a;   /* aqua    */
   --bar-dining:        #ff7f4d;   /* orange  */
   --bar-housing:       #dedcd6;   /* neutral */
@@ -71,7 +82,6 @@
   --bar-other:         #aeaba3;   /* neutral */
   --bar-uncategorized: #6e6c66;   /* neutral */
 }
-
 /* ── Reset ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -102,7 +112,7 @@ button, select, .menu-link {
 
 html, body {
   height: 100%;
-  font-family: 'Syne', system-ui, sans-serif;
+  font-family: var(--font);
   background: var(--bg);
   color: var(--ink);
   font-size: 15px;
@@ -111,7 +121,7 @@ html, body {
 
 body { display: flex; flex-direction: column; overflow: hidden; }
 
-.mono { font-family: 'IBM Plex Mono', monospace; }
+.mono { font-variant-numeric: tabular-nums; }
 
 /* ── App bar ── */
 .appbar {
@@ -127,11 +137,9 @@ body { display: flex; flex-direction: column; overflow: hidden; }
 }
 
 .appbar-logo {
-  font-family: 'Syne', sans-serif;
-  font-weight: 600;
-  font-size: 15px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-weight: 700;
+  font-size: 17px;
+  letter-spacing: -0.02em;
 }
 
 .menu-logo { color: var(--ink); }
@@ -157,10 +165,9 @@ body { display: flex; flex-direction: column; overflow: hidden; }
   background: rgba(255,255,255,.07);
   color: var(--ink);
   border: 1px solid var(--rule);
-  border-radius: var(--radius-sm);
-  padding: 6px 12px;
-  font-size: 12px;
-  font-family: 'Syne', sans-serif;
+  border-radius: var(--radius-pill);
+  padding: 7px 14px;
+  font-size: 12.5px;
   font-weight: 500;
   letter-spacing: 0.04em;
   cursor: pointer;
@@ -239,7 +246,6 @@ body { display: flex; flex-direction: column; overflow: hidden; }
   border: none;
   border-radius: var(--radius-sm);
   color: var(--ink-2);
-  font-family: 'Syne', sans-serif;
   font-size: 13px;
   font-weight: 500;
   letter-spacing: 0.03em;
@@ -279,20 +285,88 @@ main {
 /* ── Hero ──
    The weekly goal, full-bleed on the page rather than inside a card. It is
    the question the app exists to answer, so nothing frames it. */
-.hero { padding: 30px 22px 24px; }
+/* The hero is a single vivid gradient panel, and the gradient IS the signal:
+   cool-to-lime while there's budget left, a warm ramp once there isn't. The
+   number says "over" in words too, so the colour isn't carrying it alone. */
+.hero {
+  margin: 14px;
+  padding: 26px 26px 24px;
+  border-radius: var(--radius-lg);
+  background: var(--hero-good);
+  color: var(--hero-ink);
+}
+.hero.over { background: var(--hero-over); }
+
+/* With no goal set the hero is a form, not a readout — a gradient behind an
+   input is just noise, so it falls back to an ordinary card. */
+.hero.empty {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  color: var(--ink);
+}
 
 .hero-label {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.16em;
-  color: var(--ink-3);
-  font-weight: 500;
-  margin-bottom: 14px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin-bottom: 12px;
+  opacity: .7;
 }
-.hero .goal-amount { font-size: 44px; letter-spacing: -0.035em; }
-.hero .goal-track  { height: 8px; border-radius: 4px; margin: 18px 0 12px; }
-.hero .goal-fill   { border-radius: 4px; }
-.hero .goal-meta   { font-size: 11.5px; }
+.hero.empty .hero-label { opacity: 1; color: var(--ink); }
+
+.hero .goal-amount,
+.hero .goal-amount.over {
+  font-size: 46px;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  color: var(--hero-ink);
+}
+.hero .goal-unit,
+.hero .goal-amount.over .goal-unit {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--hero-ink);
+  opacity: .6;
+}
+.hero .goal-track {
+  height: 10px;
+  border-radius: var(--radius-pill);
+  background: rgba(10,11,16,.15);
+  margin: 20px 0 12px;
+}
+.hero .goal-fill,
+.hero .goal-fill.over {
+  border-radius: var(--radius-pill);
+  background: var(--hero-ink);
+}
+.hero .goal-meta {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--hero-ink);
+  opacity: .66;
+}
+
+/* "Edit goal" becomes a pill on the gradient — an underlined link on a bright
+   panel reads as a mistake. */
+.hero .link-btn {
+  margin-top: 18px;
+  padding: 9px 17px;
+  border-radius: var(--radius-pill);
+  background: var(--hero-ink);
+  color: #fff;
+  font-weight: 600;
+  font-size: 12px;
+  text-decoration: none;
+}
+.hero .link-btn:hover { color: #fff; opacity: .84; }
+.hero.empty .link-btn {
+  background: none;
+  padding: 0;
+  color: var(--err);
+  text-decoration: underline;
+}
 
 /* ── Secondary stats ──
    The month total, demoted out of the headline. Still useful, no longer the
@@ -311,33 +385,55 @@ main {
   padding: 14px 16px;
 }
 .stat-label {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  color: var(--ink-3);
+  font-size: 13px;
   font-weight: 500;
-  margin-bottom: 7px;
+  letter-spacing: -0.01em;
+  color: var(--ink-2);
+  margin-bottom: 10px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .stat-value {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 22px;
-  font-weight: 500;
-  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
   color: var(--ink);
   line-height: 1;
 }
 .stat-sub {
-  margin-top: 7px;
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 11px;
+  font-size: 12px;
   color: var(--ink-3);
   white-space: nowrap;
+}
+/* The chip keeps its size; the caption beside it is what gives way on a
+   narrow screen, and it truncates with an ellipsis rather than a hard cut. */
+.stat-cap {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* Delta chip — the reference's "+15.7%" treatment. Direction is in the sign
+   as well as the colour. */
+.chip {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+/* This tracks spending, so the sign and the colour disagree on purpose:
+   spending MORE is the bad direction. Green is never "went up". */
+.chip.good { background: var(--ok-bg);  color: var(--ok); }
+.chip.bad  { background: var(--err-bg); color: var(--err); }
 
 /* ── Cards ──
    Separate panels rather than full-bleed slabs: the gaps do the dividing, so
@@ -350,13 +446,15 @@ main {
   margin: 12px 14px;
 }
 
+/* Section headings read as headings: normal size, sentence case, full-strength
+   ink. The 10px letterspaced uppercase they replaced was the single biggest
+   source of the dated feel. */
 .card-label {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  color: var(--ink-3);
-  font-weight: 500;
-  margin-bottom: 14px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  margin-bottom: 16px;
 }
 
 /* ── Inputs ── */
@@ -379,7 +477,6 @@ input, select {
   border-radius: var(--radius-sm);
   background: var(--bg);
   color: var(--ink);
-  font-family: 'Syne', sans-serif;
   font-size: 13px;
   transition: border-color .15s;
   appearance: none;
@@ -403,13 +500,11 @@ input::placeholder { color: var(--ink-3); }
   background: var(--ink);
   color: var(--bg);
   border: none;
-  border-radius: var(--radius-sm);
-  padding: 10px 18px;
-  font-family: 'Syne', sans-serif;
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  border-radius: var(--radius-pill);
+  padding: 11px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
   cursor: pointer;
   transition: opacity .15s;
 }
@@ -419,12 +514,11 @@ input::placeholder { color: var(--ink-3); }
   background: transparent;
   color: var(--ink-2);
   border: 1px solid var(--rule);
-  border-radius: var(--radius-sm);
-  padding: 10px 16px;
-  font-family: 'Syne', sans-serif;
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0.04em;
+  border-radius: var(--radius-pill);
+  padding: 11px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
   cursor: pointer;
   transition: border-color .15s, color .15s;
 }
@@ -437,7 +531,7 @@ input::placeholder { color: var(--ink-3); }
   display: flex;
   align-items: baseline;
   gap: 8px;
-  font-family: 'IBM Plex Mono', monospace;
+  font-variant-numeric: tabular-nums;
   font-size: 30px;
   font-weight: 500;
   letter-spacing: -0.02em;
@@ -445,7 +539,6 @@ input::placeholder { color: var(--ink-3); }
   color: var(--ink);
 }
 .goal-unit {
-  font-family: 'Syne', sans-serif;
   font-size: 11px;
   font-weight: 500;
   text-transform: uppercase;
@@ -477,7 +570,7 @@ input::placeholder { color: var(--ink-3); }
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
-  font-family: 'IBM Plex Mono', monospace;
+  font-variant-numeric: tabular-nums;
   font-size: 11px;
   color: var(--ink-3);
 }
@@ -502,7 +595,6 @@ input::placeholder { color: var(--ink-3); }
   padding: 0;
   background: none;
   border: none;
-  font-family: 'Syne', sans-serif;
   font-size: 11px;
   color: var(--ink-2);
   text-decoration: underline;
@@ -517,7 +609,7 @@ input::placeholder { color: var(--ink-3); }
 .status-pill {
   margin-top: 10px;
   font-size: 11px;
-  font-family: 'IBM Plex Mono', monospace;
+  font-variant-numeric: tabular-nums;
   color: var(--ink-3);
   padding: 7px 10px;
   border-radius: var(--radius-sm);
@@ -543,7 +635,7 @@ input::placeholder { color: var(--ink-3); }
   background: var(--surface-2);
   border: 1px solid var(--rule);
   color: var(--ink-2);
-  font-family: 'IBM Plex Mono', monospace;
+  font-variant-numeric: tabular-nums;
   font-size: 11.5px;
   text-align: center;
   box-shadow: var(--shadow);
@@ -571,17 +663,16 @@ input::placeholder { color: var(--ink-3); }
   gap: 8px;
 }
 .filter-label {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  color: var(--ink-3);
+  font-size: 12px;
   font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--ink-3);
 }
 .month-select {
   width: auto;
-  padding: 6px 10px;
-  font-size: 11px;
-  border-radius: var(--radius-sm);
+  padding: 8px 14px;
+  font-size: 12.5px;
+  border-radius: var(--radius-pill);
 }
 
 /* The From date and its clear button. The shared `input` rule stretches to
@@ -589,9 +680,10 @@ input::placeholder { color: var(--ink-3); }
    their content instead. */
 .range-from {
   width: auto;
-  padding: 5px 8px;
-  font-size: 11px;
-  border-color: var(--rule-2);
+  padding: 7px 12px;
+  font-size: 12.5px;
+  border-radius: var(--radius-pill);
+  border-color: var(--rule);
 }
 .range-clear {
   display: inline-flex;
@@ -624,7 +716,7 @@ input::placeholder { color: var(--ink-3); }
 .chart-note {
   font-size: 11px;
   color: var(--ink-3);
-  font-family: 'IBM Plex Mono', monospace;
+  font-variant-numeric: tabular-nums;
   margin-top: 10px;
 }
 .chart-note:empty { display: none; }
@@ -633,9 +725,10 @@ input::placeholder { color: var(--ink-3); }
 .cat-bars { display: flex; flex-direction: column; gap: 10px; }
 .cat-bar-row { display: flex; align-items: center; gap: 10px; }
 .cat-bar-name {
-  font-size: 11px;
+  font-size: 12.5px;
+  font-weight: 500;
   color: var(--ink-2);
-  width: 88px;
+  width: 96px;
   flex-shrink: 0;
   white-space: nowrap;
   overflow: hidden;
@@ -643,21 +736,22 @@ input::placeholder { color: var(--ink-3); }
 }
 .cat-bar-track {
   flex: 1;
-  height: 4px;
+  height: 8px;
   background: var(--rule-2);
-  border-radius: 2px;
+  border-radius: var(--radius-pill);
   overflow: hidden;
 }
 .cat-bar-fill {
   height: 100%;
-  border-radius: 2px;
+  border-radius: var(--radius-pill);
   transition: width .4s ease;
 }
 .cat-bar-val {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 11px;
-  color: var(--ink-3);
-  width: 60px;
+  font-variant-numeric: tabular-nums;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+  width: 64px;
   text-align: right;
   flex-shrink: 0;
 }
@@ -693,7 +787,7 @@ input::placeholder { color: var(--ink-3); }
 }
 
 .p-date {
-  font-family: 'IBM Plex Mono', monospace;
+  font-variant-numeric: tabular-nums;
   font-size: 11px;
   color: var(--ink-3);
 }
@@ -722,7 +816,7 @@ input::placeholder { color: var(--ink-3); }
 .pill-uncategorized { color: var(--c-uncategorized); background: var(--cb-uncategorized); }
 
 .p-amount {
-  font-family: 'IBM Plex Mono', monospace;
+  font-variant-numeric: tabular-nums;
   font-size: 14px;
   font-weight: 500;
   color: var(--ink);
@@ -794,7 +888,7 @@ input::placeholder { color: var(--ink-3); }
 .cat-table td:nth-child(2),
 .cat-table td:nth-child(3) {
   text-align: right;
-  font-family: 'IBM Plex Mono', monospace;
+  font-variant-numeric: tabular-nums;
   font-size: 12px;
 }
 
@@ -817,7 +911,7 @@ input::placeholder { color: var(--ink-3); }
   flex-shrink: 0;
 }
 .actionbar-total {
-  font-family: 'IBM Plex Mono', monospace;
+  font-variant-numeric: tabular-nums;
   font-size: 12.5px;
   color: var(--ink-2);
   letter-spacing: -0.01em;
@@ -834,13 +928,11 @@ input::placeholder { color: var(--ink-3); }
   background: var(--ink);
   color: var(--bg);
   border: none;
-  border-radius: 999px;
-  padding: 10px 18px;
-  font-family: 'Syne', sans-serif;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  border-radius: var(--radius-pill);
+  padding: 11px 20px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
   cursor: pointer;
   box-shadow: var(--shadow);
   transition: opacity .15s, transform .12s ease;
