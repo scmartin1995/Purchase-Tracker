@@ -64,6 +64,15 @@
         <div class="hero-sub" id="heroSub">&nbsp;</div>
       </div>
 
+      <!-- Weekly goal. Always the current Sunday-Saturday week, and
+           deliberately NOT scoped by the filter row further down: the filter
+           is for looking around, this answers "how am I doing right now".
+           Filled in by renderWeeklyGoal(). -->
+      <section class="card" id="goalCard">
+        <div class="card-label">This week</div>
+        <div id="goalBody"></div>
+      </section>
+
       <section class="card">
         <div class="card-label">New entry</div>
         <div class="input-grid">

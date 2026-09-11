@@ -73,6 +73,13 @@ Google Sheet is the durable copy. Each purchase carries a generated `id` and a
   half-failed upload would either lose entries or duplicate them.
 - **A failed sheet write never discards the entry.** It stays local without a
   `row` — exactly the state the next sync uploads.
+- **The weekly goal ignores the time filter, on purpose.** It always means the
+  current Sunday-to-Saturday week. The filter is for looking around; the goal
+  answers "how am I doing right now", and a figure that moved when you changed
+  the filter would answer neither question.
+- **The goal lives on the device only.** It isn't a purchase, so it has no home
+  in the sheet's `A:E`, and it doesn't survive a reinstall or "Sign out &
+  clear". It's one number and it's quick to re-enter.
 - **A cached `row` is a hint, never a write address.** Every update and delete
   calls `resolveSheetRow()` first, matching the id in column E. Row numbers are
   positions and positions move: a sheet delete that commits but fails to report

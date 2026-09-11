@@ -361,6 +361,89 @@ input::placeholder { color: var(--ink-3); }
 }
 .btn-ghost:hover { border-color: var(--ink-2); color: var(--ink); }
 
+/* ── Weekly goal ──
+   The one figure on the page that ignores the filter row; it always means the
+   current Sunday-to-Saturday week. */
+.goal-amount {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 30px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: var(--ink);
+}
+.goal-unit {
+  font-family: 'Syne', sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--ink-3);
+}
+/* Over budget is stated in words as well as color — "over" next to the number
+   — so the red isn't carrying the meaning on its own. */
+.goal-amount.over,
+.goal-amount.over .goal-unit { color: var(--c-debt); }
+
+.goal-track {
+  height: 6px;
+  margin: 14px 0 10px;
+  background: var(--rule-2);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.goal-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--ink);
+  transition: width .25s ease;
+}
+.goal-fill.over { background: var(--c-debt); }
+
+.goal-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+.goal-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+/* The shared `input` rule stretches to 100% for the stacked entry form; this
+   one shares a row with its buttons. */
+.goal-form input {
+  width: auto;
+  flex: 1 1 130px;
+  min-width: 0;
+}
+.goal-hint { margin: 10px 0 0; }
+
+.link-btn {
+  margin-top: 12px;
+  padding: 0;
+  background: none;
+  border: none;
+  font-family: 'Syne', sans-serif;
+  font-size: 11px;
+  color: var(--ink-2);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.link-btn:hover { color: var(--ink); }
+.link-danger { color: var(--c-debt); }
+.link-danger:hover { color: var(--c-debt); opacity: .78; }
+
 /* ── Status pill ── */
 .status-pill {
   margin-top: 10px;

@@ -25,6 +25,7 @@ const LS_KEY_SHEET_ID  = "userSheetId";
 const LS_KEY_SHEET_GID = "userSheetGid";
 const LS_KEY_TOKEN     = "gAccessToken";
 const LS_KEY_TOKEN_EXP = "gAccessTokenExp";
+const LS_KEY_WEEKLY_GOAL = "weeklyGoal";
 
 // Label for a purchase with no category. Deliberately NOT "Other" — that's a
 // category the user can pick on purpose. This one means "we don't know".
@@ -37,6 +38,11 @@ let gapiReady   = false;
 // total, the hero total, the category bars and the trend chart. See RANGE
 // VALUES below for the forms it takes.
 let activeRange = "";
+
+// The standing weekly spending target, or null when none is set. Lives on the
+// device only — it isn't a purchase, so it has no home in the sheet's A:E.
+let weeklyGoal  = loadWeeklyGoal();
+let goalEditing = false;
 
 let SPREADSHEET_ID = localStorage.getItem(LS_KEY_SHEET_ID)  || null;
 let SHEET_GID      = localStorage.getItem(LS_KEY_SHEET_GID) || null;
@@ -154,7 +160,17 @@ const ACTIONS = {
   "clear-device":  () => clearPurchases(),
   "create-sheet":  () => manualCreateSheet(),
   "clear-range":   () => setRange(""),
+  "edit-goal":     () => { goalEditing = true;  renderWeeklyGoal({ force: true }); },
+  "cancel-goal":   () => { goalEditing = false; renderWeeklyGoal({ force: true }); },
+  "save-goal":     () => saveGoalFromInput(),
+  "remove-goal":   () => { saveWeeklyGoal(null); goalEditing = false; renderWeeklyGoal({ force: true }); },
 };
+
+// The goal input submits on Enter as well as on the button — it's a one-field
+// form, and reaching for the mouse to commit one number is a nuisance.
+document.addEventListener("keydown", e => {
+  if (e.key === "Enter" && e.target?.id === "goalInput") saveGoalFromInput();
+});
 
 document.addEventListener("click", e => {
   const el = e.target.closest("[data-action]");
@@ -313,6 +329,118 @@ function updateHero() {
   subEl.textContent    = count === 1 ? "1 purchase" : `${count} purchases`;
 }
 
+// ===== Weekly goal =====
+// A standing weekly target, measured over the current Sunday-to-Saturday week.
+//
+// This is the one number on the page that ignores the filter row. The filter
+// is for looking around — "what did August cost me" — and this answers "how
+// am I doing right now". A figure that moved when you changed the filter
+// would answer neither question.
+
+function loadWeeklyGoal() {
+  const n = parseFloat(localStorage.getItem(LS_KEY_WEEKLY_GOAL));
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function saveWeeklyGoal(value) {
+  if (value === null) localStorage.removeItem(LS_KEY_WEEKLY_GOAL);
+  else localStorage.setItem(LS_KEY_WEEKLY_GOAL, String(value));
+  weeklyGoal = value;
+}
+
+// Sunday through Saturday around the given day, as YYYY-MM-DD. Built by
+// stepping a local Date set to midday, so a DST change can't shift the
+// boundary onto the wrong calendar day.
+function weekBounds(today = todayStr()) {
+  const [y, m, d] = today.split("-").map(Number);
+  const start = new Date(y, m - 1, d, 12);
+  start.setDate(start.getDate() - start.getDay());   // getDay(): 0 is Sunday
+  const end = new Date(start);
+  end.setDate(end.getDate() + 6);
+  return {
+    start: start.toLocaleDateString("en-CA"),
+    end:   end.toLocaleDateString("en-CA"),
+  };
+}
+
+function weekSpend() {
+  const { start, end } = weekBounds();
+  return purchases
+    .filter(p => p.date && p.date >= start && p.date <= end && isValidAmount(p.amount))
+    .reduce((s, p) => s + parseFloat(p.amount), 0);
+}
+
+// Today through Saturday inclusive, so Sunday reads 7 and Saturday reads 1.
+function daysLeftInWeek() {
+  return 7 - new Date().getDay();
+}
+
+// "Sep 6–12", or "Aug 30 – Sep 5" when the week straddles a month.
+function weekRangeLabel({ start, end }) {
+  const [, sm, sd] = start.split("-").map(Number);
+  const [, em, ed] = end.split("-").map(Number);
+  const mon = n => new Date(2000, n - 1).toLocaleString("default", { month: "short" });
+  return sm === em ? `${mon(sm)} ${sd}–${ed}` : `${mon(sm)} ${sd} – ${mon(em)} ${ed}`;
+}
+
+function saveGoalFromInput() {
+  const input = document.getElementById("goalInput");
+  if (!input) return;
+  const value = parseFloat(input.value);
+  if (!Number.isFinite(value) || value <= 0) { alert("Enter a weekly goal above $0."); return; }
+  saveWeeklyGoal(value);
+  goalEditing = false;
+  renderWeeklyGoal({ force: true });
+}
+
+function renderWeeklyGoal({ force = false } = {}) {
+  const body = document.getElementById("goalBody");
+  if (!body) return;
+  // A render can fire from anywhere — adding a purchase, changing the filter.
+  // Don't tear the input out from under someone mid-type.
+  if (goalEditing && !force) return;
+
+  const range = weekRangeLabel(weekBounds());
+
+  if (goalEditing || weeklyGoal === null) {
+    const isFirst = weeklyGoal === null;
+    body.innerHTML = `
+      <div class="goal-form">
+        <label class="sr-only" for="goalInput">Weekly spending goal</label>
+        <input id="goalInput" type="number" step="0.01" min="0" inputmode="decimal"
+               class="mono" placeholder="$0.00" value="${isFirst ? "" : weeklyGoal}" />
+        <button class="btn-primary" data-action="save-goal">${isFirst ? "Set goal" : "Save"}</button>
+        ${isFirst ? "" : `<button class="btn-ghost" data-action="cancel-goal">Cancel</button>`}
+      </div>
+      ${isFirst
+        ? `<p class="subtle goal-hint">Set a target and this shows what's left of it. This week is ${range}.</p>`
+        : `<button class="link-btn link-danger" data-action="remove-goal">Remove goal</button>`}
+    `;
+    document.getElementById("goalInput")?.focus();
+    return;
+  }
+
+  const spent = weekSpend();
+  const left  = weeklyGoal - spent;
+  const over  = left < 0;
+  const pct   = Math.min(100, (spent / weeklyGoal) * 100);
+  const days  = daysLeftInWeek();
+
+  body.innerHTML = `
+    <div class="goal-amount${over ? " over" : ""}">
+      $${Math.abs(left).toFixed(2)}<span class="goal-unit">${over ? "over" : "left"}</span>
+    </div>
+    <div class="goal-track">
+      <div class="goal-fill${over ? " over" : ""}" style="width:${pct.toFixed(1)}%"></div>
+    </div>
+    <div class="goal-meta">
+      <span>$${spent.toFixed(2)} of $${weeklyGoal.toFixed(2)}</span>
+      <span>${range} · ${days} day${days === 1 ? "" : "s"} left</span>
+    </div>
+    <button class="link-btn" data-action="edit-goal">Edit goal</button>
+  `;
+}
+
 // ===== Rendering =====
 // Rows are addressed by the purchase's own id, not its position in the array.
 // Positions were only ever safe because every mutation re-rendered the whole
@@ -386,6 +514,7 @@ function renderPurchases() {
     ? `Total (${rangeTitle()}): $${total.toFixed(2)}`
     : `Total: $${total.toFixed(2)}`;
   updateHero();
+  renderWeeklyGoal();
   updateCategoryBars();
   renderTrendChart();
 }
